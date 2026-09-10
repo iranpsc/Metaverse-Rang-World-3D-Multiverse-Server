@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package metaverse.voice.npc.v1;
+
+service VoiceNpcPublisher {
+    rpc AuthorizeSession(VoiceNpcSessionRequest) returns (VoiceNpcSessionResult);
+    rpc Publish(stream VoiceNpcFrame) returns (VoiceNpcPublishResult);
+    rpc SetRecordingConsent(VoiceNpcRecordingConsentRequest) returns (VoiceNpcOperationResult);
+    rpc CloseSession(VoiceNpcSessionCloseRequest) returns (VoiceNpcOperationResult);
+}
+
+message VoiceNpcListener {
+    string user_id = 1;
+    string connection_id = 2;
+}
+
+message VoiceNpcSessionRequest {
+    string session_id = 1;
+    string npc_id = 2;
+    string npc_user_id = 3;
+    string publisher_connection_id = 4;
+    string server_id = 5;
+    string room_id = 6;
+    repeated VoiceNpcListener listeners = 7;
+}
+
+message VoiceNpcSessionResult {
+    bool success = 1;
+    string reason = 2;
+    string session_id = 3;
+}
+
+message VoiceNpcFrame {
+    string session_id = 1;
+    string npc_id = 2;
+    string server_id = 3;
+    uint32 sequence = 4;
+    uint64 timestamp_ms = 5;
+    bytes opus_frame = 6;
+}
+
+message VoiceNpcPublishResult {
+    bool success = 1;
+    uint32 accepted_frames = 2;
+    uint32 rejected_frames = 3;
+    string reason = 4;
+}
+
+message VoiceNpcRecordingConsentRequest {
+    string session_id = 1;
+    string npc_id = 2;
+    string server_id = 3;
+    bool consented = 4;
+}
+
+message VoiceNpcSessionCloseRequest {
+    string session_id = 1;
+    string npc_id = 2;
+    string server_id = 3;
+}
+
+message VoiceNpcOperationResult {
+    bool success = 1;
+    string reason = 2;
+}

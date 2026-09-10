@@ -1,0 +1,52 @@
+# Secrets / environment
+.env
+.env.*
+!server/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+
+# Node generated content
+server/node_modules/
+server/coverage/
+server/logs/
+server/log/
+server/tmp/
+server/temp/
+server/*.log
+
+# Runtime / production data
+**/*.pid
+**/*.pid.lock
+**/*.log
+**/*.tmp
+**/*.temp
+**/DedicatedServer_process_manifest.jsonl
+**/DedicatedServer_process_manifest.jsonl.*
+**/recordings/
+**/data/
+
+# Voice recordings / generated audio
+**/*.ogg
+
+# Backups / archives
+**/*.bak
+**/*.bak_*
+**/*.bak-*
+**/*.backup
+**/*.backup_*
+**/*.backup-*
+**/*.old
+**/*.tar
+**/*.gz
+**/*.zip
+
+# PM2 runtime state
+.pm2/
+dump.pm2
+
+# OS/editor
+.DS_Store
+Thumbs.db

@@ -1,0 +1,30 @@
+// File => protos/common/ user.proto
+syntax = "proto3";
+
+package metaverse.v1;
+
+option csharp_namespace = "Metaverse.V1";
+
+message User {
+  string id = 1;
+  string email = 2;
+  int64 createdAtUnix = 3;
+  string userName = 4;
+}
+
+/* مدل مشترک User را برای قراردادهای gRPC تعریف می‌کند.
+
+این فایل داخل package منطقی metaverse.v1 قرار دارد
+و برای Unity خروجی C# را در namespace Metaverse.V1 می‌سازد.
+
+در این فایل، message اصلی User تعریف می‌شود
+که شامل شناسه کاربر، ایمیل و زمان ساخت کاربر است.
+
+این message معمولاً در auth.proto استفاده می‌شود
+تا responseهایی مثل Register، Login، Refresh و GetUserData
+بتوانند اطلاعات کاربر را با ساختار یکسان به کلاینت برگردانند.
+
+در مسیر Register، authService اطلاعات داخلی کاربر دیتابیس را
+با toUserResponse به همین ساختار تبدیل می‌کند
+و سپس handler آن را داخل response gRPC به کلاینت برمی‌گرداند.
+ */

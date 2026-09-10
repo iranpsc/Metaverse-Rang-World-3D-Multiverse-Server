@@ -1,0 +1,95 @@
+﻿Root: D:\Ghadiry\server
+============================================================
+[FILE] .env (312 bytes)
+[FILE] .env.example (226 bytes)
+[FILE] BACKUP_before_cleanup_20260225_032858.zip (2752210 bytes)
+[DIR ] certs
+[FILE] certs\localhost.pem (1659 bytes)
+[FILE] certs\localhost-key.pem (1704 bytes)
+[FILE] check-against-target.ps1 (3754 bytes)
+[FILE] check-extra-files.ps1 (4737 bytes)
+[FILE] create-missing-skeleton.ps1 (10169 bytes)
+[FILE] dump-project-tree-clean.ps1 (1918 bytes)
+[DIR ] envoy
+[FILE] envoy\envoy.yaml (3196 bytes)
+[FILE] package.json (475 bytes)
+[FILE] package-lock.json (23139 bytes)
+[DIR ] protos
+[DIR ] protos\auth
+[FILE] protos\auth\auth.proto (928 bytes)
+[DIR ] protos\common
+[FILE] protos\common\common.proto (233 bytes)
+[FILE] protos\common\user.proto (186 bytes)
+[FILE] protos\health.proto (261 bytes)
+[DIR ] protos\realtime
+[FILE] protos\realtime\realtime.proto (344 bytes)
+[FILE] README.md (358 bytes)
+[FILE] restore-missing-safe.ps1 (3502 bytes)
+[DIR ] scripts
+[FILE] scripts\create-realtime-skeleton.ps1 (2654 bytes)
+[FILE] scripts\mkcert-dev.ps1 (583 bytes)
+[DIR ] src
+[DIR ] src\config
+[FILE] src\config\env.js (981 bytes)
+[FILE] src\config\tls.js (253 bytes)
+[FILE] src\config\validation.js (297 bytes)
+[DIR ] src\domain
+[DIR ] src\domain\auth
+[FILE] src\domain\auth\authErrors.js (1362 bytes)
+[FILE] src\domain\auth\authUseCases.js (2346 bytes)
+[FILE] src\domain\auth\passwordService.js (283 bytes)
+[FILE] src\domain\auth\tokenService.js (457 bytes)
+[FILE] src\domain\auth\userRepository.js (723 bytes)
+[DIR ] src\grpc
+[DIR ] src\grpc\interceptors
+[FILE] src\grpc\interceptors\authInterceptor.js (760 bytes)
+[FILE] src\grpc\interceptors\chainInterceptors.js (439 bytes)
+[FILE] src\grpc\interceptors\clientInfoInterceptor.js (248 bytes)
+[FILE] src\grpc\interceptors\errorMapper.js (914 bytes)
+[FILE] src\grpc\interceptors\loggingInterceptor.js (238 bytes)
+[FILE] src\grpc\protoLoader.js (855 bytes)
+[FILE] src\grpc\server.js (1828 bytes)
+[DIR ] src\grpc\services
+[FILE] src\grpc\services\authService.js (2839 bytes)
+[FILE] src\grpc\services\index.js (120 bytes)
+[FILE] src\index.js (788 bytes)
+[DIR ] src\realtime
+[FILE] src\realtime\clientsRegistry.js (330 bytes)
+[FILE] src\realtime\index.js (1335 bytes)
+[DIR ] src\realtime\protocol
+[FILE] src\realtime\protocol\channels.js (172 bytes)
+[FILE] src\realtime\protocol\envelope.js (601 bytes)
+[FILE] src\realtime\roomManager.js (592 bytes)
+[DIR ] src\realtime\router
+[FILE] src\realtime\router\npcRoutes.js (78 bytes)
+[FILE] src\realtime\router\presenceRoutes.js (88 bytes)
+[FILE] src\realtime\router\realtimeRouter.js (647 bytes)
+[FILE] src\realtime\router\systemRoutes.js (84 bytes)
+[FILE] src\realtime\router\voiceSignalRoutes.js (94 bytes)
+[FILE] src\realtime\router\worldRoutes.js (82 bytes)
+[DIR ] src\realtime\stability
+[FILE] src\realtime\stability\disconnectCleanup.js (244 bytes)
+[FILE] src\realtime\stability\floodProtection.js (394 bytes)
+[FILE] src\realtime\stability\heartbeat.js (589 bytes)
+[FILE] src\realtime\wsAuth.js (260 bytes)
+[FILE] src\run-dev.ps1 (852 bytes)
+[FILE] src\shutdown.js (691 bytes)
+[DIR ] src\test
+[FILE] src\test\basic-test.js (63 bytes)
+[DIR ] src\test\bench
+[FILE] src\test\bench\npc-push.js (41 bytes)
+[FILE] src\test\bench\presence-load.js (46 bytes)
+[FILE] src\test\bench\voice-signal.js (45 bytes)
+[FILE] src\test\bench\world-broadcast.js (48 bytes)
+[DIR ] src\utils
+[FILE] src\utils\ids.js (272 bytes)
+[FILE] src\utils\logger.js (542 bytes)
+[FILE] src\utils\metrics.js (422 bytes)
+[DIR ] src\voice
+[DIR ] src\voice\docs
+[FILE] src\voice\docs\voice-architecture.md (116 bytes)
+[DIR ] src\voice\webrtc
+[FILE] src\voice\webrtc\sfuAdapter.js (91 bytes)
+[FILE] src\voice\webrtc\stunTurnConfig.js (153 bytes)
+============================================================
+Total items: 91

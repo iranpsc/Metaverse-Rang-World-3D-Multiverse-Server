@@ -1,0 +1,36 @@
+OFFICIAL_PHASE=G.4.RD0
+WORK_ITEM=VOICE_RECORDING_USER_DOWNLOAD_CONTRACT_LOCK
+SOURCE_DOCUMENT=مستند جامع تسک و پرسش و پاسخ زیرساخت صوتی متارنگ
+
+CONTRACT_SUMMARY:
+- هر Voice Session یک فایل Mix کامل نهایی دارد.
+- فایل اصلی ذخیره‌سازی سرور: session.ogg
+- فایل متادیتای سرور: session.json
+- فایل‌های partial فقط موقت هستند و هرگز برای کاربر قابل دانلود نیستند.
+- هر کاربر فقط بخشی از Session را می‌تواند دانلود یا پخش کند که در آن حضور داشته است.
+- تشخیص بخش مجاز دانلود باید از روی intervals داخل session.json انجام شود.
+- خروجی دانلود کاربر باید یک فایل OGG واحد باشد، نه چند فایل تکه‌تکه.
+- اگر کاربر در کل Session حضور داشته باشد، همان session.ogg قابل تحویل است.
+- اگر کاربر فقط بخشی از Session حضور داشته باشد، سرور باید فایل مجاز را با Clip/Trim بسازد.
+- اگر یک Session بسته و Burn شد و بعد Session جدید ساخته شد، فایل ضبط جدید و sessionId جدید دارد.
+- چند Session مستقل نباید در یک فایل دانلودی ادغام شوند.
+- فایل‌های ضبط‌شده نباید Public یا مستقیم از Nginx ارائه شوند.
+- دانلود باید فقط از مسیر احراز هویت‌شده HTTP انجام شود.
+- userId باید از Token معتبر گرفته شود.
+- userId باید در همان session.json و intervals مجاز وجود داشته باشد.
+- non-member باید 403 بگیرد.
+- فایل آماده‌نشده یا partial باید 404 بگیرد.
+
+REQUIRED_ENDPOINTS:
+1) GET /voice/recordings
+   - لیست ضبط‌های آماده و مجاز همان user
+2) GET /voice/recordings/{sessionId}/download
+   - دانلود فایل OGG واحد مجاز همان user
+
+NEXT_PHASES:
+G.4.RD1 = add intervals to recording metadata
+G.4.RD2 = finalize metadata and recording readiness rules
+G.4.RD3 = implement authorized clip/trim download output
+G.4.RD4 = implement authenticated user recording list
+G.4.RD5 = harden download security and errors
+G.4.RD6 = regression and live curl tests

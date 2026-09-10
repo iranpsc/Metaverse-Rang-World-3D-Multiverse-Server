@@ -1,0 +1,17 @@
+﻿// File => protos/realtime/ realtime.proto
+syntax = "proto3";
+package metaverse.realtime;
+option csharp_namespace = "Metaverse.Realtime";
+
+message RealtimeEnvelope {
+  string type = 1;
+  string channel = 2;
+  string id = 3;
+  int64 ts = 4;
+  string room = 5;
+  bytes payload = 6;
+}
+
+service RealtimeService {
+  rpc Ping(RealtimeEnvelope) returns (RealtimeEnvelope);
+}

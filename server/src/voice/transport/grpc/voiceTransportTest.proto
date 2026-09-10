@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package metaverse.voice.transport.test.v1;
+
+service VoiceTransportTest {
+    rpc Connect(stream VoiceTransportPacket)
+        returns (stream VoiceTransportPacket);
+}
+
+message VoiceTransportPacket {
+    bytes packet = 1;
+}

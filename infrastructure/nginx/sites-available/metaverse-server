@@ -1,0 +1,409 @@
+server {
+
+    server_name dev-world-3d.metarang.com;
+
+    client_max_body_size 50M;
+
+    location = /completed-buildings.json {
+        alias /var/www/html/completed-buildings.json;
+        default_type application/json;
+
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Cache-Control "no-store" always;
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
+
+    location = /health {
+        proxy_pass http://127.0.0.1:8080/health;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 15s;
+        proxy_read_timeout 15s;
+        proxy_buffering off;
+    }
+
+    location = /game {
+        return 301 /game/;
+    }
+
+    location ~ ^/game/(.*\.wasm\.br)$ {
+        alias /var/www/metaverse-webgl/$1;
+        default_type application/wasm;
+        add_header Content-Encoding br always;
+        add_header Vary Accept-Encoding always;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+    }
+
+    location ~ ^/game/(.*\.data\.br)$ {
+        alias /var/www/metaverse-webgl/$1;
+        default_type application/octet-stream;
+        add_header Content-Encoding br always;
+        add_header Vary Accept-Encoding always;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+    }
+
+    location ~ ^/game/(.*\.js\.br)$ {
+        alias /var/www/metaverse-webgl/$1;
+        default_type application/javascript;
+        add_header Content-Encoding br always;
+        add_header Vary Accept-Encoding always;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+    }
+
+    location ~ ^/game/(.*\.wasm)$ {
+        alias /var/www/metaverse-webgl/$1;
+        types {
+            application/wasm wasm;
+        }
+        default_type application/wasm;
+    }
+
+    location /game/ {
+        alias /var/www/metaverse-webgl/;
+        index index.html;
+    }
+
+    location /metaverse.v1.AuthService/ {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_set_header Connection "";
+        proxy_set_header TE "trailers";
+
+        proxy_buffering off;
+        proxy_request_buffering off;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location /metaverse.v1.HealthService/ {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_set_header Connection "";
+        proxy_set_header TE "trailers";
+
+        proxy_buffering off;
+        proxy_request_buffering off;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location /ws {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location /realtime {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location ~ ^/game-server/(?<dedicated_game_server_port>777[7-9]|778[0-9]|779[0-6])/?$ {
+        rewrite ^ / break;
+
+        proxy_pass http://127.0.0.1:$dedicated_game_server_port;
+        proxy_http_version 1.1;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+    }
+
+    location ^~ /game-server-control/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_buffering off;
+        proxy_request_buffering off;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+
+    location ^~ /voice/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_buffering off;
+        proxy_request_buffering off;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+
+
+    location = /staging {
+        default_type text/plain;
+        return 200 "metaverse staging is running\n";
+    }
+
+    location = /staging/ {
+        default_type text/plain;
+        return 200 "metaverse staging is running\n";
+    }
+
+    location = /orbix {
+        default_type text/plain;
+        return 200 "orbix stage is running\n";
+    }
+
+    location = /orbix/ {
+        default_type text/plain;
+        return 200 "orbix stage is running\n";
+    }
+
+    location = /orbix/health {
+        proxy_pass http://127.0.0.1:8082/health;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+    }
+
+    location ^~ /orbix/ws {
+        rewrite ^/orbix/ws/?$ /ws break;
+
+        proxy_pass http://127.0.0.1:8082;
+        proxy_http_version 1.1;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+    }
+
+    location ^~ /orbix/game-server-control/ {
+        rewrite ^/orbix/game-server-control/(.*)$ /game-server-control/$1 break;
+
+        proxy_pass http://127.0.0.1:8082;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location ~ ^/orbix/game-server/(?<orbix_port>200[0-1][0-9])/?$ {
+        rewrite ^ / break;
+
+        proxy_pass http://127.0.0.1:$orbix_port;
+        proxy_http_version 1.1;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+    }
+
+    location ^~ /staging/ws {
+        rewrite ^/staging/ws/?$ /ws break;
+
+        proxy_pass http://127.0.0.1:8082;
+        proxy_http_version 1.1;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+    }
+
+    location ^~ /staging/game-server-control/ {
+        rewrite ^/staging/game-server-control/(.*)$ /game-server-control/$1 break;
+
+        proxy_pass http://127.0.0.1:8082;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_buffering off;
+        proxy_request_buffering off;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location ~ ^/staging/game-server/(?<staging_port>200[0-1][0-9])/?$ {
+        rewrite ^ / break;
+
+        proxy_pass http://127.0.0.1:$staging_port;
+        proxy_http_version 1.1;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+    }
+
+
+    location / {
+        default_type text/plain;
+        return 200 "metaverse backend is running\n";
+    }
+
+    listen [::]:443 ssl ipv6only=on;
+    listen 443 ssl;
+    ssl_certificate /etc/letsencrypt/live/dev-world-3d.metarang.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/dev-world-3d.metarang.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+
+server {
+    listen 50052 ssl http2;
+    listen [::]:50052 ssl http2;
+
+    server_name dev-world-3d.metarang.com;
+
+    client_max_body_size 50M;
+
+    ssl_certificate /etc/letsencrypt/live/dev-world-3d.metarang.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/dev-world-3d.metarang.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    location / {
+        grpc_pass grpc://127.0.0.1:50051;
+        grpc_read_timeout 3600s;
+        grpc_send_timeout 3600s;
+
+        grpc_set_header Host $host;
+        grpc_set_header X-Real-IP $remote_addr;
+        grpc_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        grpc_set_header X-Forwarded-Proto https;
+    }
+}
+
+
+server {
+    listen 50054 ssl http2;
+    listen [::]:50054 ssl http2;
+
+    server_name dev-world-3d.metarang.com;
+
+    client_max_body_size 50M;
+
+    ssl_certificate /etc/letsencrypt/live/dev-world-3d.metarang.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/dev-world-3d.metarang.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    location / {
+        grpc_pass grpc://127.0.0.1:50053;
+        grpc_read_timeout 3600s;
+        grpc_send_timeout 3600s;
+
+        grpc_set_header Host $host;
+        grpc_set_header X-Real-IP $remote_addr;
+        grpc_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        grpc_set_header X-Forwarded-Proto https;
+    }
+}
+
+server {
+    if ($host = dev-world-3d.metarang.com) {
+        return 301 https://$host$request_uri;
+    }
+
+    listen 80;
+    listen [::]:80;
+
+    server_name dev-world-3d.metarang.com;
+    return 404;
+}

@@ -1,0 +1,114 @@
+syntax = "proto3";
+
+package metaverse.v1;
+
+option csharp_namespace = "Metaverse.V1";
+
+import "common/user.proto";
+
+service AuthService {
+  // Public RPCs
+  rpc Register (RegisterRequest) returns (RegisterResponse);
+  rpc Login (LoginRequest) returns (LoginResponse);
+    rpc LoginWithMicroservice (LoginRequest) returns (LoginResponse);
+rpc Refresh (RefreshRequest) returns (RefreshResponse);
+
+  // Protected RPCs
+  rpc GetUserData (GetUserDataRequest) returns (GetUserDataResponse);
+  rpc GetMicroserviceUserData (GetMicroserviceUserDataRequest) returns (GetMicroserviceUserDataResponse);
+  rpc Logout (LogoutRequest) returns (LogoutResponse);
+  rpc LogoutAllDevices (LogoutAllDevicesRequest) returns (LogoutResponse);
+}
+
+// ----------------------------------------------------
+// Requests
+// ----------------------------------------------------
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+  string userName = 3;
+}
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+  string userName = 3;
+}
+
+message RefreshRequest {
+  string refreshToken = 1;
+}
+
+message GetUserDataRequest {
+  // intentionally empty
+  // user is resolved from access token metadata
+}
+
+message LogoutRequest {
+  string refreshToken = 1;
+}
+
+message LogoutAllDevicesRequest {
+  // intentionally empty
+  // user is resolved from access token metadata
+}
+
+// ----------------------------------------------------
+// Responses
+// ----------------------------------------------------
+
+message RegisterResponse {
+  bool success = 1;
+  string message = 2;
+  string accessToken = 3;
+  string refreshToken = 4;
+  int32 expiresIn = 5;
+  User user = 6;
+}
+
+message LoginResponse {
+  bool success = 1;
+  string message = 2;
+  string accessToken = 3;
+  string refreshToken = 4;
+  int32 expiresIn = 5;
+  User user = 6;
+}
+
+message RefreshResponse {
+  bool success = 1;
+  string message = 2;
+  string accessToken = 3;
+  string refreshToken = 4;
+  int32 expiresIn = 5;
+  User user = 6;
+}
+
+message GetUserDataResponse {
+  bool success = 1;
+  string message = 2;
+  User user = 3;
+}
+
+message LogoutResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message GetMicroserviceUserDataRequest {
+}
+
+message MicroserviceUserProfile {
+  string microserviceId = 1;
+  string name = 2;
+  string code = 3;
+  string avatar = 4;
+  string microserviceUserName = 5;
+  int64 lastSyncAtUnix = 6;
+}
+
+message GetMicroserviceUserDataResponse {
+  bool success = 1;
+  string message = 2;
+  MicroserviceUserProfile profile = 3;
+}

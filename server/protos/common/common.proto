@@ -1,0 +1,32 @@
+// File => protos/common/common.proto
+syntax = "proto3";
+
+package metaverse.v1;
+
+option csharp_namespace = "Metaverse.V1";
+
+message Empty {}
+
+message Error {
+  string code = 1;      // مثل: INVALID_ARGUMENT, UNAUTHENTICATED, INTERNAL
+  string message = 2;
+}
+
+//پیام‌های عمومی و مشترک بین سرویس‌های مختلف gRPC را تعریف می‌کند.
+/* پیام‌های عمومی و مشترک بین سرویس‌های gRPC را تعریف می‌کند.
+
+این فایل با syntax = "proto3" نوشته شده
+و داخل package منطقی metaverse.v1 قرار دارد.
+
+در این فایل، Empty به عنوان یک message بدون فیلد تعریف شده
+تا برای RPCهایی استفاده شود که request body خاصی ندارند.
+
+همچنین message ساده‌ای به نام Error تعریف شده
+که شامل دو فیلد code و message است.
+
+این فایل خودش service ندارد،
+اما می‌تواند توسط protoهای دیگر مثل health.proto یا auth.proto import شود.
+
+تنظیم csharp_namespace = "Metaverse.V1" هم باعث می‌شود
+کلاس‌های generated در Unity داخل namespace مناسب C# قرار بگیرند.
+ */

@@ -1,0 +1,15 @@
+[Unit]
+Description=Metaverse Envoy gRPC-Web Proxy
+After=network.target
+
+[Service]
+Type=simple
+User=world3d
+WorkingDirectory=/home/world3d/apps/metaverse-server
+ExecStart=/usr/bin/envoy -c /home/world3d/apps/metaverse-server/envoy/envoy.vps.yaml --log-level info
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

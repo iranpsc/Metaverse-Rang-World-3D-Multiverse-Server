@@ -1,0 +1,35 @@
+// File => protos/ health.proto
+syntax = "proto3";
+
+package metaverse.v1;
+
+option csharp_namespace = "Metaverse.V1";
+
+import "common/common.proto";
+
+service HealthService {
+  rpc Check(Empty) returns (HealthReply);
+}
+
+message HealthReply {
+  bool ok = 1;
+  string message = 2;
+}
+
+/* 
+قرارداد gRPC مربوط به HealthService را تعریف می‌کند.
+
+این فایل داخل package منطقی metaverse.v1 قرار دارد
+و برای خروجی Unity از namespace Metaverse.V1 استفاده می‌کند.
+
+در این فایل، سرویس HealthService با یک RPC به نام Check تعریف شده است.
+ورودی این RPC از نوع Empty است و خروجی آن HealthReply است.
+
+پیام HealthReply شامل دو فیلد ok و message است.
+در handler فعلی، مقدار این پاسخ { ok: true, message: "ok" } برگردانده می‌شود.
+
+این proto در server.js load می‌شود،
+سپس HealthService از داخل package پیدا می‌شود
+و با healthHandlers روی gRPC Server ثبت می‌شود.
+
+ */
