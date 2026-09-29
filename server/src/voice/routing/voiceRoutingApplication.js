@@ -900,7 +900,6 @@ class VoiceRoutingApplication {
             this.packetFlowGuard.inspect({
                 connectionId,
                 sequence: envelope.sequence,
-                timestampMs: envelope.timestampMs,
                 payloadBytes: envelope.payloadLength
             });
 
@@ -1507,56 +1506,44 @@ class VoiceRoutingApplication {
         publisherConnectionId,
         envelope
     }) {
-        const routedAtMs = this.now();
-        const mediaEnvelope = {
-            messageType:
-                VoiceMessageType.VOICE_FRAME,
-            flags:
-                envelope.flags,
-            timestampMs:
-                routedAtMs,
-            sessionId,
-            senderId:
-                publisherConnectionId,
-            payload:
-                envelope.payload
-        };
+        try {
+            const serverRoutedAtMs =
+                this.now();
 
-        if (
-            typeof listenerTransport
-                .enqueueMediaEnvelope ===
-                "function"
-        ) {
-            const accepted =
-                listenerTransport
-                    .enqueueMediaEnvelope(
-                        mediaEnvelope
-                    );
-
-            if (!accepted) {
-                throw new Error(
-                    "Voice listener media queue is not accepting frames."
+            if (
+                !Number.isSafeInteger(
+                    serverRoutedAtMs
+                ) ||
+                serverRoutedAtMs < 0
+            ) {
+                throw new RangeError(
+                    "Voice server routing clock is invalid."
                 );
             }
 
-            return true;
-        }
-
-        try {
-            await listenerTransport
-                .sendEnvelope(
-                    mediaEnvelope
-                );
-
-            return true;
+            await listenerTransport.sendEnvelope({
+                messageType:
+                    VoiceMessageType.VOICE_FRAME,
+                flags:
+                    envelope.flags,
+                timestampMs:
+                    serverRoutedAtMs,
+                sessionId,
+                senderId:
+                    publisherConnectionId,
+                payload:
+                    envelope.payload
+            });
         } catch (error) {
             await listenerTransport.close({
                 closeMessage:
-                    error?.message ?? String(error),
+                    error?.message ??
+                    String(error),
                 registryReason:
                     VoiceConnectionCloseReason
                         .TRANSPORT_CLOSED
             });
+
             throw error;
         }
     }

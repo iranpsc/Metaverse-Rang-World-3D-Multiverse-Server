@@ -205,9 +205,8 @@ async function main() {
     const maxPlayers = asInteger(readArg("maxPlayers", "200"), 200);
     const roomMaxPlayers = asInteger(readArg("roomMaxPlayers", "50"), 50);
     const roomCount = asInteger(readArg("roomCount", "4"), 4);
-    const username = readArg("username", process.env.MICROSERVICE_TEST_USERNAME || "");
-    const password = readArg("password", process.env.MICROSERVICE_TEST_PASSWORD || "");
-    if (!username || !password) throw new Error("MICROSERVICE_TEST_USERNAME and MICROSERVICE_TEST_PASSWORD are required");
+    const username = readArg("username", "ssaadatpur@gmail.com");
+    const password = readArg("password", "?Ss9147574662");
 
     const auth = await createAccessTokenWithMicroservice({ username, password });
 

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+
+OUT="/home/world3d/apps/metaverse-server/tools/voice-monitor/MS6_TRACE_$(date +%Y%m%d_%H%M%S).log"
+
+PATTERN="VOICE_DIRECTIONAL_BUTTON_STATE|VOICE_RECORDING_EVENT_STORED|VOICE_RECORDING_SESSION_TRACKED|VOICE_DOWNLOAD_READY|VOICE_POLICY_CLEANUP|VOICE_CONNECTION_CLEANUP"
+
+echo "MS6 MONITOR START $(date -Is)" | tee -a "$OUT"
+
+pm2 logs metaverse-server --raw | \
+rg "$PATTERN" | \
+while IFS= read -r line
+do
+    echo "$(date -Is) $line" | tee -a "$OUT"
+done

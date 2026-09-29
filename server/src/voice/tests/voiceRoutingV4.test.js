@@ -419,27 +419,48 @@ assert.equal(
     2
 );
 
-const futureTimestampGuard =
+const serverClockAuthorityGuard =
     new VoicePacketFlowGuard({
         now: () => NOW_MS
     });
 
-const futureTimestampFrame =
-    futureTimestampGuard.inspect({
+const oldClientClockFrame =
+    serverClockAuthorityGuard.inspect({
         connectionId:
             identities.b.connectionId,
         sequence: 1,
         timestampMs:
-            BigInt(NOW_MS + 10_000),
+            BigInt(NOW_MS - 60_000),
         payloadBytes:
             opusFrame.length
     });
 
-assert.equal(futureTimestampFrame.accepted, true);
 assert.equal(
-    futureTimestampGuard.getStats()
-        .normalizedPacketsByReason.future_timestamp,
-    1
+    oldClientClockFrame.accepted,
+    true
+);
+
+const futureClientClockFrame =
+    serverClockAuthorityGuard.inspect({
+        connectionId:
+            identities.b.connectionId,
+        sequence: 2,
+        timestampMs:
+            BigInt(NOW_MS + 60_000),
+        payloadBytes:
+            opusFrame.length
+    });
+
+assert.equal(
+    futureClientClockFrame.accepted,
+    true
+);
+
+assert.deepEqual(
+    serverClockAuthorityGuard
+        .getStats()
+        .normalizedPacketsByReason,
+    {}
 );
 
 const duplicate =

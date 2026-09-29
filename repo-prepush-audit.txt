@@ -1,0 +1,45 @@
+===== GIT =====
+## gRPC
+?? repo-prepush-audit.txt
+* gRPC 6e95ba0 Create CONTRIBUTING.md
+  main 6e95ba0 [origin/main] Create CONTRIBUTING.md
+origin	https://github.com/iranpsc/Metaverse-Rang-World-3D-Multiverse-Server.git (fetch)
+origin	https://github.com/iranpsc/Metaverse-Rang-World-3D-Multiverse-Server.git (push)
+
+===== LFS =====
+git-lfs/3.7.0 (GitHub; windows amd64; go 1.24.4; git 92dddf56)
+game-server/LinuxGameServer/LinuxGameServer.x86_64: filter: lfs
+game-server/LinuxGameServer/LinuxGameServer.x86_64: diff: lfs
+game-server/LinuxGameServer/LinuxGameServer.x86_64: merge: lfs
+
+===== MAPPED REPOSITORY FILES =====
+FOUND: infrastructure/pm2/ecosystem.config.cjs
+fd40e0c9cd2e0921570fc3783c47a6922516596a7547ca0b47b08b26a7862d5e *infrastructure/pm2/ecosystem.config.cjs
+FOUND: infrastructure/envoy/envoy.vps.yaml
+fe285db368afc47e4fda7b00a5fcd5d5b2b560325b62cad070d4cf5446af3380 *infrastructure/envoy/envoy.vps.yaml
+FOUND: infrastructure/nginx/nginx.conf
+f3c93d7ab73454d68fc3dc4d25b2bc681ed1d0df578bb2083213c87104950645 *infrastructure/nginx/nginx.conf
+FOUND: infrastructure/nginx/sites-available/metaverse-server
+eccacca32954aa3f7203c5573a51acb44b5fbb5947c1edc964cd7c02db99564a *infrastructure/nginx/sites-available/metaverse-server
+FOUND: infrastructure/systemd/pm2-world3d.service
+78864e21eb8ca44692ebe0a927857e1fd1762cf3799b65002abf49e1ccbc7281 *infrastructure/systemd/pm2-world3d.service
+FOUND: infrastructure/systemd/envoy-metaverse.service
+e08c102eea5ba84f8a7b549a9f43e7bf4f6b93471e9c6a60ed9d558347d8babf *infrastructure/systemd/envoy-metaverse.service
+
+===== INFRASTRUCTURE FILES =====
+infrastructure/envoy/cert/.gitkeep
+infrastructure/envoy/cert/jwt/.gitkeep
+infrastructure/envoy/envoy.local.docker.yaml
+infrastructure/envoy/envoy.vps.yaml
+infrastructure/envoy/envoy.yaml
+infrastructure/nginx/nginx.conf
+infrastructure/nginx/sites-available/metaverse-server
+infrastructure/pm2/ecosystem.config.cjs
+infrastructure/systemd/envoy-metaverse.service
+infrastructure/systemd/pm2-world3d.service
+
+===== SERVER DOCKER FILES =====
+
+===== GAME SERVER REPOSITORY BUILD =====
+FILE_COUNT=208
+GAME_SERVER_TREE_SHA256=e21117b7b343948440cb8c22e1f0d3bcf7173bc1e646a03ea82bf993afa39b85

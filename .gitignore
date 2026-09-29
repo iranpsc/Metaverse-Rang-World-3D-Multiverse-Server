@@ -50,3 +50,7 @@ dump.pm2
 # OS/editor
 .DS_Store
 Thumbs.db
+
+# Dedicated server runtime output
+**/*.stdout
+**/*.stderr

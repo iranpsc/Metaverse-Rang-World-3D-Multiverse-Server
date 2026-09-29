@@ -1,0 +1,236 @@
+GameServerControl Startup Probe Report
+=====================================
+
+Project Root: /home/world3d/apps/metaverse-server
+
+package.json
+------------
+exists: true
+path: package.json
+type: module
+main: src/index.js
+
+scripts
+-------
+start: nodemon src/index.js
+
+startup candidates
+------------------
+
+#1 src/gameServerControl/gameServerControlStartupProbe.js
+score: 231
+matches: app.listen, server.listen, http.createServer, https.createServer, express(), new WebSocketServer, attachRealtime, attachGrpc, attach, listen(, process.env.PORT, app.use, router
+line hints:
+  L31: { key: "app.listen", weight: 30 },
+  L32: { key: "server.listen", weight: 30 },
+  L33: { key: "http.createServer", weight: 25 },
+  L34: { key: "https.createServer", weight: 25 },
+  L35: { key: "express()", weight: 25 },
+  L37: { key: "attachRealtime", weight: 20 },
+  L38: { key: "attachGrpc", weight: 15 },
+  L40: { key: "listen(", weight: 10 },
+  L42: { key: "app.use", weight: 8 },
+  L158: "app.listen",
+  L159: "server.listen",
+  L160: "http.createServer",
+  L161: "https.createServer",
+  L162: "express()",
+  L163: "attachRealtime",
+  L164: "attachGrpc",
+  L165: "app.use",
+  L166: "listen("
+
+#2 src/realTime/transport/grpcStreaming/smokeGrpcStreamingRealtimeCrossTransport.js
+score: 78
+matches: http.createServer, attachRealtime, attachGrpc, attach, listen(
+line hints:
+  L8: import { attachRealtime } from "../../index.js";
+  L9: import { attachGrpcStreamingRealtimeCore } from "./attachGrpcStreamingRealtimeCore.js";
+  L71: httpServer.listen(0, "127.0.0.1", () => {
+  L640: const httpServer = http.createServer();
+  L656: websocketRuntime = attachRealtime({
+  L662: grpcRuntime = attachGrpcStreamingRealtimeCore({
+
+#3 src/index.js
+score: 63
+matches: http.createServer, attachRealtime, attach, listen(
+line hints:
+  L10: import { attachRealtime } from "./realTime/index.js";
+  L18: return http.createServer((req, res) => {
+  L84: httpServer.listen(cfg.ws.port, () => {
+  L108: const websocketRealtimeRuntime = attachRealtime({
+
+#4 src/realTime/index.js
+score: 33
+matches: attachRealtime, attach, router
+line hints:
+  L31: function attachRealtimeHeartbeatToContext(ctx, logger = null) {
+  L156: export function attachRealtime({ server, tokenService, logger, path = "" } = {}) {
+  L157: if (!server) throw new Error("attachRealtime requires http or tls server");//قبلا در ایندکس اصلی این سرور اپ تی تی پی ساخته شده است و وبسوکت روی آن اجرا می شود
+  L177: onConnection: (ctx) => attachRealtimeHeartbeatToContext(ctx, logger),//این وقتی اجرا می‌شود که یک کانکشن جدید واقعاً وارد کر شده باشد. و هارت بیت برای کانتکست ایجاد شده فعال مشود
+  L243: attachRealtime()
+
+#5 src/realTime/transport/grpcStreaming/attachGrpcStreamingRealtimeCore.js
+score: 28
+matches: attachGrpc, attach, router
+line hints:
+  L192: throw new Error("attachGrpcStreamingRealtimeCore requires grpcServer with addService");
+  L197: function attachGrpcStreamingRealtimeCore({
+  L296: attachGrpcStreamingRealtimeCore,
+
+#6 src/realTime/transport/grpcStreaming/attachGrpcStreamingRealtime.js
+score: 23
+matches: attachGrpc, attach
+line hints:
+  L1: // File => src/realTime/transport/grpcStreaming/attachGrpcStreamingRealtime.js
+  L7: function attachGrpcStreamingRealtime({
+  L43: export { attachGrpcStreamingRealtime };
+
+#7 src/realTime/transport/grpcStreaming/registerGrpcRealtimeOnMainServer.js
+score: 23
+matches: attachGrpc, attach
+line hints:
+  L1: import { attachGrpcStreamingRealtimeCore } from "./attachGrpcStreamingRealtimeCore.js";
+  L10: return attachGrpcStreamingRealtimeCore({
+
+#8 src/realTime/transport/grpcStreaming/setupGrpcStreamingRealtime.js
+score: 23
+matches: attachGrpc, attach
+line hints:
+  L6: import { attachGrpcStreamingRealtime } from "./attachGrpcStreamingRealtime.js";
+  L63: const grpcStreamingTransport = attachGrpcStreamingRealtime({
+
+#9 src/realTime/transport/grpcStreaming/smokeGrpcStreamingRealtimeCoreAuth.js
+score: 23
+matches: attachGrpc, attach
+line hints:
+  L3: import { attachGrpcStreamingRealtimeCore } from "./attachGrpcStreamingRealtimeCore.js";
+  L175: attachResult = attachGrpcStreamingRealtimeCore({
+
+#10 src/realTime/transport/grpcStreaming/smokeGrpcStreamingRealtimeCorePing.js
+score: 23
+matches: attachGrpc, attach
+line hints:
+  L2: import { attachGrpcStreamingRealtimeCore } from "./attachGrpcStreamingRealtimeCore.js";
+  L141: attachResult = attachGrpcStreamingRealtimeCore({
+
+#11 src/realTime/transport/grpcStreaming/smokeGrpcStreamingRealtimeCoreRegisterAuth.js
+score: 23
+matches: attachGrpc, attach
+line hints:
+  L6: import { attachGrpcStreamingRealtimeCore } from "./attachGrpcStreamingRealtimeCore.js";
+  L294: attachResult = attachGrpcStreamingRealtimeCore({
+
+#12 src/realTime/transport/grpcStreaming/smokeGrpcStreamingRealtimeCoreRegisterCreateJoin.js
+score: 23
+matches: attachGrpc, attach
+line hints:
+  L6: import { attachGrpcStreamingRealtimeCore } from "./attachGrpcStreamingRealtimeCore.js";
+  L408: attachResult = attachGrpcStreamingRealtimeCore({
+
+#13 src/realTime/transport/grpcStreaming/smokeGrpcStreamingRealtimeCoreTwoClientPlayerState.js
+score: 23
+matches: attachGrpc, attach
+line hints:
+  L6: import { attachGrpcStreamingRealtimeCore } from "./attachGrpcStreamingRealtimeCore.js";
+  L571: attachResult = attachGrpcStreamingRealtimeCore({
+
+#14 src/realTime/transport/grpcStreaming/smokeGrpcStreamingRealtimeCoreTwoClientPresence.js
+score: 23
+matches: attachGrpc, attach
+line hints:
+  L6: import { attachGrpcStreamingRealtimeCore } from "./attachGrpcStreamingRealtimeCore.js";
+  L484: attachResult = attachGrpcStreamingRealtimeCore({
+
+#15 src/realTime/transport/websocket/websocketTransport.js
+score: 20
+matches: new WebSocketServer
+
+#16 src/gameServerControl/gameServerControlHttpApi.js
+score: 13
+matches: attach, router
+
+#17 src/gameServerControl/gameServerControlHttpApi.selftest.js
+score: 13
+matches: attach, router
+
+#18 src/gameServerControl/gameServerControlStartupPatch.selftest.js
+score: 13
+matches: attach, router
+
+#19 src/gameServerControl/routes/gameServerControlRoutes.js
+score: 13
+matches: attach, router
+
+#20 src/gameServerControl/routes/gameServerControlRoutes.selftest.js
+score: 13
+matches: attach, router
+
+#21 src/gameServerControl/attachGameServerControl.js
+score: 8
+matches: attach
+
+#22 src/gameServerControl/attachGameServerControl.selftest.js
+score: 8
+matches: attach
+
+#23 src/realTime/stability/disconnectCleanup.js
+score: 8
+matches: attach
+
+#24 src/realTime/core/realtimeServer.js
+score: 5
+matches: router
+
+#25 src/realTime/router/chatRoutes.js
+score: 5
+matches: router
+
+#26 src/realTime/router/gameRoutes.js
+score: 5
+matches: router
+
+#27 src/realTime/router/index.js
+score: 5
+matches: router
+
+#28 src/realTime/router/lobbyRoutes.js
+score: 5
+matches: router
+
+#29 src/realTime/router/npcRoutes.js
+score: 5
+matches: router
+
+#30 src/realTime/router/presenceRoutes.js
+score: 5
+matches: router
+
+#31 src/realTime/router/realtimeRouter.js
+score: 5
+matches: router
+
+#32 src/realTime/router/routeRegistry.js
+score: 5
+matches: router
+
+#33 src/realTime/router/systemRoutes.js
+score: 5
+matches: router
+
+#34 src/realTime/router/voiceSignalRoutes.js
+score: 5
+matches: router
+
+#35 src/realTime/router/worldRoutes.js
+score: 5
+matches: router
+
+#36 src/realTime/transport/grpcStreaming/inspectGrpcRealtimeCoreExports.js
+score: 5
+matches: router
+
+next step
+---------
+Open the highest-score candidate file before applying any startup patch.
+Do not modify startup before reviewing the exact file.

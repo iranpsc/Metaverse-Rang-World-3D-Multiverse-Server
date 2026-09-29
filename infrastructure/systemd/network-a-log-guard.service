@@ -1,0 +1,7 @@
+[Unit]
+Description=Network A production log guard
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/network-a-log-guard.sh

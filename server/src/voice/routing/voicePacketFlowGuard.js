@@ -4,7 +4,7 @@ import {
 } from "./voiceRoutingConstants.js";
 
 class VoicePacketFlowGuard {
-    //* این سازنده شمارنده‌های محدود نرخ و ترتیب هر فرستنده را آماده می‌کند.
+    //* این سازنده شمارنده های محدود نرخ و ترتیب هر فرستنده را آماده می کند.
     constructor({
         policy = {},
         now = () => Date.now()
@@ -19,10 +19,13 @@ class VoicePacketFlowGuard {
         this.acceptedPackets = 0;
         this.acceptedBytes = 0;
         this.droppedPacketsByReason = new Map();
+
+        // برای سازگاری با قرارداد آماری موجود نگه داشته می شود.
+        // Timestamp کلاینت دیگر برای تصمیم گیری یا Normalize استفاده نمی شود.
         this.normalizedPacketsByReason = new Map();
     }
 
-    //* این تابع ترتیب، زمان، اندازه، جهش و نرخ یک فریم را پیش از مسیر‌دهی بررسی می‌کند.
+    //* این تابع فریم را فقط با وضعیت و ساعت خود سرور از نظر ترتیب، اندازه، نرخ و Burst بررسی می کند.
     inspect({
         connectionId,
         sequence,
@@ -53,10 +56,15 @@ class VoicePacketFlowGuard {
             throw new RangeError("Voice frame payload size is invalid.");
         }
 
-        const packetTimestamp =
-            typeof timestampMs === "bigint"
-                ? timestampMs
-                : BigInt(timestampMs);
+        /*
+        قانون قطعی:
+        timestampMs از کلاینت غیرقابل اعتماد است و هیچ نقشی در
+        Freshness / Expire / Clock Skew / Accept / Drop ندارد.
+
+        تازگی مسیر زنده فقط بر اساس وضعیت دریافت شده توسط خود سرور،
+        Sequence و پنجره های زمانی ساخته شده با ساعت خود سرور کنترل می شود.
+        */
+        void timestampMs;
 
         const nowMs = this.now();
 
@@ -64,23 +72,10 @@ class VoicePacketFlowGuard {
             throw new RangeError("Voice routing clock is invalid.");
         }
 
-        const nowValue = BigInt(nowMs);
-        const oldestAllowed = nowValue -
-            BigInt(this.policy.maxPacketAgeMs);
-        const newestAllowed = nowValue +
-            BigInt(this.policy.maxFutureClockSkewMs);
-
-        if (packetTimestamp < 0n || packetTimestamp < oldestAllowed) {
-            return this.createDrop(VoiceRoutingDropReason.EXPIRED);
-        }
-
-        if (packetTimestamp > newestAllowed) {
-            this.recordTimestampNormalization(
-                VoiceRoutingDropReason.FUTURE_TIMESTAMP
+        let state =
+            this.statesByConnectionId.get(
+                normalizedConnectionId
             );
-        }
-
-        let state = this.statesByConnectionId.get(normalizedConnectionId);
 
         if (!state) {
             state = {
@@ -92,25 +87,47 @@ class VoicePacketFlowGuard {
                 burstPackets: 0
             };
 
-            this.statesByConnectionId.set(normalizedConnectionId, state);
+            this.statesByConnectionId.set(
+                normalizedConnectionId,
+                state
+            );
         }
 
-        if (sequence === state.lastAcceptedSequence) {
-            return this.createDrop(VoiceRoutingDropReason.DUPLICATE);
+        if (
+            sequence ===
+            state.lastAcceptedSequence
+        ) {
+            return this.createDrop(
+                VoiceRoutingDropReason.DUPLICATE
+            );
         }
 
-        if (sequence < state.lastAcceptedSequence) {
-            return this.createDrop(VoiceRoutingDropReason.LATE);
+        if (
+            sequence <
+            state.lastAcceptedSequence
+        ) {
+            return this.createDrop(
+                VoiceRoutingDropReason.LATE
+            );
         }
 
-        if (nowMs - state.windowStartedAtMs >= 1000) {
+        if (
+            nowMs -
+                state.windowStartedAtMs >=
+            1000
+        ) {
             state.windowStartedAtMs = nowMs;
             state.windowPackets = 0;
             state.windowBytes = 0;
         }
 
-        if (nowMs - state.burstWindowStartedAtMs >= 100) {
-            state.burstWindowStartedAtMs = nowMs;
+        if (
+            nowMs -
+                state.burstWindowStartedAtMs >=
+            100
+        ) {
+            state.burstWindowStartedAtMs =
+                nowMs;
             state.burstPackets = 0;
         }
 
@@ -118,36 +135,50 @@ class VoicePacketFlowGuard {
             state.windowPackets + 1 >
             this.policy.maxPacketsPerSecond
         ) {
-            return this.createDrop(VoiceRoutingDropReason.PACKET_RATE);
+            return this.createDrop(
+                VoiceRoutingDropReason.PACKET_RATE
+            );
         }
 
         if (
             state.windowBytes + payloadBytes >
             this.policy.maxBytesPerSecond
         ) {
-            return this.createDrop(VoiceRoutingDropReason.BYTE_RATE);
+            return this.createDrop(
+                VoiceRoutingDropReason.BYTE_RATE
+            );
         }
 
         if (
-            (state.windowBytes + payloadBytes) * 8 >
+            (
+                state.windowBytes +
+                payloadBytes
+            ) * 8 >
             this.policy.maxBitsPerSecond
         ) {
-            return this.createDrop(VoiceRoutingDropReason.BITRATE);
+            return this.createDrop(
+                VoiceRoutingDropReason.BITRATE
+            );
         }
 
         if (
             state.burstPackets + 1 >
             this.policy.maxBurstPackets
         ) {
-            return this.createDrop(VoiceRoutingDropReason.BURST);
+            return this.createDrop(
+                VoiceRoutingDropReason.BURST
+            );
         }
 
-        state.lastAcceptedSequence = sequence;
+        state.lastAcceptedSequence =
+            sequence;
         state.windowPackets += 1;
         state.windowBytes += payloadBytes;
         state.burstPackets += 1;
+
         this.acceptedPackets += 1;
-        this.acceptedBytes += payloadBytes;
+        this.acceptedBytes +=
+            payloadBytes;
 
         return Object.freeze({
             accepted: true,
@@ -155,15 +186,18 @@ class VoicePacketFlowGuard {
         });
     }
 
-    //* این تابع یک Timestamp ناسازگار با ساعت سرور را بدون قطع مسیر زنده ثبت می‌کند.
+    //* این تابع برای سازگاری API قبلی باقی مانده است ولی در مسیر Server-authoritative استفاده نمی شود.
     recordTimestampNormalization(reason) {
         this.normalizedPacketsByReason.set(
             reason,
-            (this.normalizedPacketsByReason.get(reason) ?? 0) + 1
+            (
+                this.normalizedPacketsByReason
+                    .get(reason) ?? 0
+            ) + 1
         );
     }
 
-    //* این تابع وضعیت یک فرستنده حذف‌شده را از محدودکننده نرخ پاک می‌کند.
+    //* این تابع وضعیت یک فرستنده حذف شده را از محدودکننده نرخ پاک می کند.
     removeConnection(connectionId) {
         return this.statesByConnectionId.delete(
             String(connectionId ?? "")
@@ -172,11 +206,14 @@ class VoicePacketFlowGuard {
         );
     }
 
-    //* این تابع یک نتیجه رد را ثبت و به‌صورت قفل‌شده برمی‌گرداند.
+    //* این تابع یک نتیجه رد را ثبت و به صورت قفل شده برمی گرداند.
     createDrop(reason) {
         this.droppedPacketsByReason.set(
             reason,
-            (this.droppedPacketsByReason.get(reason) ?? 0) + 1
+            (
+                this.droppedPacketsByReason
+                    .get(reason) ?? 0
+            ) + 1
         );
 
         return Object.freeze({
@@ -185,18 +222,27 @@ class VoicePacketFlowGuard {
         });
     }
 
-    //* این تابع آمار بسته‌های پذیرفته و ردشده را بدون داده صوتی برمی‌گرداند.
+    //* این تابع آمار بسته های پذیرفته و رد شده را بدون داده صوتی برمی گرداند.
     getStats() {
         return Object.freeze({
-            trackedPublishers: this.statesByConnectionId.size,
-            acceptedPackets: this.acceptedPackets,
-            acceptedBytes: this.acceptedBytes,
-            droppedPacketsByReason: Object.freeze(
-                Object.fromEntries(this.droppedPacketsByReason)
-            ),
-            normalizedPacketsByReason: Object.freeze(
-                Object.fromEntries(this.normalizedPacketsByReason)
-            )
+            trackedPublishers:
+                this.statesByConnectionId.size,
+            acceptedPackets:
+                this.acceptedPackets,
+            acceptedBytes:
+                this.acceptedBytes,
+            droppedPacketsByReason:
+                Object.freeze(
+                    Object.fromEntries(
+                        this.droppedPacketsByReason
+                    )
+                ),
+            normalizedPacketsByReason:
+                Object.freeze(
+                    Object.fromEntries(
+                        this.normalizedPacketsByReason
+                    )
+                )
         });
     }
 }
@@ -207,5 +253,9 @@ export {
 
 /*
 توضیح فایل:
-این فایل فریم زنده را پیش از توزیع از نظر ترتیب، تکرار، دیررس‌بودن، انقضا، اختلاف ساعت، اندازه، نرخ بسته، نرخ بایت، بیت‌ریت و جهش لحظه‌ای کنترل می‌کند. Timestamp آینده برای مسیر زنده فقط ثبت و نرمال‌سازی می‌شود تا اختلاف ساعت کلاینت و سرور مسیر صوت را قطع نکند. هیچ داده صوتی در آمار نگه داشته نمی‌شود.
+این فایل مسیر زنده Voice را فقط با ساعت و وضعیت خود سرور کنترل می کند.
+Timestamp ارسال شده توسط Client برای Freshness، Expire یا Clock Skew معتبر نیست
+و در تصمیم Accept/Drop استفاده نمی شود. ترتیب Sequence، Duplicate، Late،
+اندازه Frame، Packet Rate، Byte Rate، Bitrate و Burst همچنان توسط Server
+کنترل می شوند.
 */

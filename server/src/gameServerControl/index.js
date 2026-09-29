@@ -1137,7 +1137,6 @@ class GameServerControl {
 
             if (!record || record.event !== "launched") continue;
             if (record.serverId !== server.serverId) continue;
-            if (server.roomId && record.roomId !== server.roomId) continue;
 
             return record;
         }

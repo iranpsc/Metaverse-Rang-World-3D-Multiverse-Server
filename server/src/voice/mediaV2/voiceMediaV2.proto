@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package metaverse.voice.media.v2;
+
+service VoiceMediaTransport {
+  rpc Connect(stream VoiceMediaPacket) returns (stream VoiceMediaPacket);
+}
+
+message VoiceMediaPacket {
+  bytes packet = 1;
+}

@@ -1,3 +1,8 @@
+map $arg_transport $voice_media_node_ws_upstream {
+    default http://127.0.0.1:8080;
+    voice-media-v2 http://127.0.0.1:51001;
+}
+
 server {
 
     server_name dev-world-3d.metarang.com;
@@ -109,7 +114,7 @@ server {
     }
 
     location /ws {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass $voice_media_node_ws_upstream;
         proxy_http_version 1.1;
 
         proxy_set_header Upgrade $http_upgrade;
@@ -357,6 +362,17 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/dev-world-3d.metarang.com/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    location = /metaverse.voice.media.v2.VoiceMediaTransport/Connect {
+        grpc_pass grpc://127.0.0.1:51002;
+        grpc_read_timeout 3600s;
+        grpc_send_timeout 3600s;
+
+        grpc_set_header Host $host;
+        grpc_set_header X-Real-IP $remote_addr;
+        grpc_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        grpc_set_header X-Forwarded-Proto https;
+    }
 
     location / {
         grpc_pass grpc://127.0.0.1:50051;
