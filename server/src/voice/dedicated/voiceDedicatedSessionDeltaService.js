@@ -900,6 +900,22 @@ class VoiceDedicatedSessionDeltaService {
                     event,
                     applyResult
                 );
+            } else if (
+                event.type === VoiceDedicatedSessionDeltaEventType.SESSION_CREATED &&
+                applyResult.reason === "voice_delta_session_created_idempotent" &&
+                applyResult.data?.result?.idempotent === true &&
+                applyResult.data.result.session?.participants?.every(
+                    (participant) =>
+                        this.voiceConnectionRegistry.getSessionEligibility?.(
+                            participant.connectionId
+                        )?.eligible !== false
+                ) === true
+            ) {
+                // Control-only replay: recording observers ignore this synthetic type.
+                await this.notifyEventApplied(
+                    { ...event, type: "session_reconciliation" },
+                    applyResult
+                );
             }
 
             sequenceState
@@ -995,35 +1011,23 @@ class VoiceDedicatedSessionDeltaService {
                 );
 
         if (!state) {
-            if (
-                firstSourceSequence !==
-                1
-            ) {
-                return {
-                    success:
-                        false,
-
-                    result:
-                        createVoiceDedicatedDeltaFailure(
-                            "voice_delta_sequence_must_start_at_one",
-                            "A dedicated Voice authority epoch must start at source sequence one.",
-                            {
-                                serverId,
-                                authorityEpochId,
-                                receivedSequence:
-                                    firstSourceSequence
-                            },
-                            409
-                        )
-                };
-            }
+            // The dedicated process can stay online while the Node process
+            // restarts. Its authenticated authority epoch and source sequence
+            // keep advancing. Rejoin that stream at the first authenticated
+            // event we actually receive, rather than permanently rejecting
+            // the queue just because the in-memory counter was restarted.
+            // Token verification, server registration and batch validation
+            // are completed by acceptBatch BEFORE reaching this branch.
+            // All later events in this epoch must still be contiguous.
+            const resumeBeforeFirstSequence =
+                firstSourceSequence - 1;
 
             state = {
                 currentEpochId:
                     authorityEpochId,
 
                 lastAcceptedSequence:
-                    0,
+                    resumeBeforeFirstSequence,
 
                 burnedEpochIds:
                     new Set()
@@ -1034,6 +1038,17 @@ class VoiceDedicatedSessionDeltaService {
                     serverId,
                     state
                 );
+
+            if (resumeBeforeFirstSequence > 0) {
+                this.logger?.warn?.(
+                    "VOICE_W4_DEDICATED_EPOCH_RESUMED_AFTER_BACKEND_RESTART",
+                    {
+                        serverId,
+                        authorityEpochId,
+                        firstSourceSequence
+                    }
+                );
+            }
 
             return {
                 success:
@@ -1388,6 +1403,16 @@ class VoiceDedicatedSessionDeltaService {
     applySessionCreated(
         event
     ) {
+        // A delayed source event may refer to Dedicated connections which
+        // were definitively replaced by a newer authenticated room membership.
+        // Acknowledge ONLY that obsolete create; never bypass Voice readiness
+        // for a pair that is still the authoritative current membership.
+        const superseded =
+            this.resolveSupersededPairCreate(event);
+        if (superseded !== null) {
+            return superseded;
+        }
+
         const membershipResult =
             this.resolveVerifiedPairParticipants(
                 event
@@ -1463,6 +1488,63 @@ class VoiceDedicatedSessionDeltaService {
                     409
             };
         }
+    }
+
+    // Treat a delayed create as obsolete only when the authoritative Game
+    // Server registry has exactly one READY current connection for EACH user
+    // and at least one of those connection IDs supersedes the event ID.
+    // This avoids a permanent FIFO conflict after one or both clients reconnect
+    // with new Dedicated IDs, without ever accepting an unverified session.
+    resolveSupersededPairCreate(event) {
+        const gameSession =
+            this.gameSessionRegistry.findSessionByRoom(event.roomId);
+        if (!gameSession ||
+            this.gameSessionRegistry.isPublicSessionOpen(gameSession) !== true ||
+            String(gameSession.serverId ?? "").trim() !== event.serverId) {
+            return null;
+        }
+
+        const players = Array.isArray(gameSession.players)
+            ? gameSession.players
+            : [];
+        const firstReady = players.filter((player) =>
+            String(player?.userId ?? "").trim() === event.firstUserId &&
+            player?.isReady === true &&
+            canonicalizeVoiceDedicatedConnectionId(player?.connectionId) !== ""
+        );
+        const secondReady = players.filter((player) =>
+            String(player?.userId ?? "").trim() === event.secondUserId &&
+            player?.isReady === true &&
+            canonicalizeVoiceDedicatedConnectionId(player?.connectionId) !== ""
+        );
+        if (firstReady.length !== 1 || secondReady.length !== 1) {
+            return null;
+        }
+
+        const currentFirst = canonicalizeVoiceDedicatedConnectionId(
+            firstReady[0].connectionId
+        );
+        const currentSecond = canonicalizeVoiceDedicatedConnectionId(
+            secondReady[0].connectionId
+        );
+        if (currentFirst === event.firstConnectionId &&
+            currentSecond === event.secondConnectionId) {
+            return null;
+        }
+
+        return {
+            success: true,
+            applied: false,
+            reason: "voice_delta_superseded_pair_create_ignored",
+            message: "Obsolete pair create superseded by verified current Dedicated membership.",
+            data: {
+                roomId: event.roomId,
+                sessionId: event.sessionId,
+                currentFirstConnectionId: currentFirst,
+                currentSecondConnectionId: currentSecond
+            },
+            httpStatusCode: 200
+        };
     }
 
     //* این تابع حضور دو ترکیب شناسه کاربر و اتصال را در نشست همان روم و اتصال صوتی فعال تأیید می‌کند.

@@ -24,6 +24,9 @@ import {
     VoiceDedicatedSessionEligibilityService
 } from "./voiceDedicatedSessionEligibilityService.js";
 
+import { sharedVoiceAccessTokenVerifier } from "../bootstrap/sharedVoiceAccessTokenVerifier.js";
+import { createVoiceWebRtcW3AuthHandler } from "../webrtc/voiceWebRtcW3AuthHandler.js";
+
 //* این تابع رانتایم دریافت رویدادهای سشن صوتی را پیش از ساخت سرور اچ‌تی‌تی‌پی آماده می‌کند.
 function createVoiceDedicatedSessionDeltaRuntime({
     logger = null
@@ -33,6 +36,8 @@ function createVoiceDedicatedSessionDeltaRuntime({
 
     let eligibilityService =
         null;
+
+    let webRtcW3AuthHandler = null;
 
     let voiceSessionRegistry =
         null;
@@ -70,6 +75,10 @@ function createVoiceDedicatedSessionDeltaRuntime({
         req,
         res
     ) {
+        if (webRtcW3AuthHandler && await webRtcW3AuthHandler(req, res)) {
+            return true;
+        }
+
         if (
             await eligibilityHttpHandler(
                 req,
@@ -184,6 +193,17 @@ function createVoiceDedicatedSessionDeltaRuntime({
                 voiceConnectionRegistry
             });
 
+        if (String(process.env.VME2_WEBRTC_W3_ENABLED ?? "") === "1") {
+            webRtcW3AuthHandler = createVoiceWebRtcW3AuthHandler({
+                tokenVerifier: sharedVoiceAccessTokenVerifier,
+                voiceConnectionRegistry,
+                gameSessionRegistry: gameServerControlRuntime.sessionRegistry,
+                voiceSessionRegistry,
+                secretBase64: process.env.VME2_WEBRTC_AUTH_SECRET,
+                allowedOrigin: process.env.VME2_WEBRTC_ALLOWED_ORIGIN
+            });
+        }
+
         attached =
             true;
 
@@ -238,6 +258,8 @@ function createVoiceDedicatedSessionDeltaRuntime({
 
         eligibilityService =
             null;
+
+        webRtcW3AuthHandler = null;
 
         voiceAuthoritativeSessionService =
             null;

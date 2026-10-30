@@ -22,6 +22,8 @@ import {
     VoiceTransportGateway
 } from "../transport/voiceTransportGateway.js";
 
+import { installWebGlMicSfuPolicyRelay, releaseWebGlMicSfuPolicyRelay } from "../directional/voiceWebGlMicSfuPolicyRelay.js";
+
 //* این تابع سرویس‌های Routing، Mute، کنترل جریان و Reconnect را روی رجیستری‌های مشترک V3 می‌سازد.
 function createVoiceV4RuntimeServices({
     voiceRuntimeServices,
@@ -104,6 +106,8 @@ function createVoiceV4RuntimeServices({
             now
         });
 
+    installWebGlMicSfuPolicyRelay(routingApplication);
+
     const voiceTransportGateway =
         new VoiceTransportGateway({
             connectionRegistrationService:
@@ -121,6 +125,7 @@ function createVoiceV4RuntimeServices({
 
     //* این تابع زمان‌سنج‌های نگهداری V4 را هنگام توقف پاک می‌کند.
     function stop() {
+        releaseWebGlMicSfuPolicyRelay(routingApplication);
         reconnectCoordinator.stop();
     }
 

@@ -2,6 +2,8 @@ import {
     createVoiceRecordingHttpHandler
 } from "../recording/createVoiceRecordingHttpHandler.js";
 
+import { createVoiceWebRtcRecordingBridgeServer } from "../recording/voiceWebRtcRecordingBridgeServer.js";
+
 import {
     VoiceRecordingDownloadService
 } from "../recording/voiceRecordingDownloadService.js";
@@ -14,11 +16,43 @@ import {
     VoiceRecordingStopReason
 } from "../recording/voiceRecordingConstants.js";
 
+import {
+    VoiceSpatialSpoolStore
+} from "../recordingSpatial/voiceSpatialSpoolStore.js";
+
+import {
+    createSpatialTimelineHttpHandler
+} from "../recordingSpatial/voiceSpatialTimelineStartupHook.js";
+
+import {
+    PERSONAL_SPATIAL_PATH_PATTERN,
+    createPersonalSpatialDownload,
+    createPersonalSpatialHttpHandler
+} from "../recordingSpatial/voicePersonalSpatialDownloadStartupHook.js";
+
+import {
+    createPersonalHrtfDownload
+} from "../recordingHrtf/voicePersonalHrtfDownloadStartupHook.js";
+
+import {
+    createVoicePrimaryPersonalDownloadHandler
+} from "../recordingHrtf/voicePrimaryPersonalDownloadHandler.js";
+
+const SPATIAL_TIMELINE_PATH =
+    "/game-server-control/dedicated/voice-spatial-timeline";
+
+function readEnabledEnvironmentFlag(name) {
+    return ["1", "true", "yes", "on"].includes(
+        String(process.env[name] ?? "").trim().toLowerCase()
+    );
+}
+
 //* این تابع سرویس ضبط، دانلود و Handler HTTP را روی Bucket محلی تعیین‌شده می‌سازد.
 function createVoiceV5RuntimeServices({
     storageRoot,
     resolveUserFromRequest,
     recordingPolicy = {},
+    serviceTokenService = null,
     logger = null,
     now = () => Date.now()
 } = {}) {
@@ -29,12 +63,21 @@ function createVoiceV5RuntimeServices({
             now
         });
 
+    const recordingBridgeEnabled = readEnabledEnvironmentFlag("VME2_WEBRTC_RECORDING_BRIDGE_ENABLED");
+    const recordingBridge = recordingBridgeEnabled
+        ? createVoiceWebRtcRecordingBridgeServer({
+            recordingService,
+            secretBase64: process.env.VME2_WEBRTC_AUTH_SECRET,
+            port: Number(process.env.VME2_WEBRTC_RECORDING_BRIDGE_PORT ?? 8768),
+            logger
+        }) : null;
+
     const recordingDownloadService =
         new VoiceRecordingDownloadService({
             storageRoot
         });
 
-    const recordingHttpHandler =
+    const baseRecordingHttpHandler =
         createVoiceRecordingHttpHandler({
             downloadService:
                 recordingDownloadService,
@@ -42,9 +85,131 @@ function createVoiceV5RuntimeServices({
             logger
         });
 
+    const spatialTimelineEnabled =
+        readEnabledEnvironmentFlag(
+            "VOICE_SPATIAL_TIMELINE_ENABLED"
+        );
+
+    const personalSpatialDownloadEnabled =
+        readEnabledEnvironmentFlag(
+            "VOICE_PERSONAL_SPATIAL_DOWNLOAD_ENABLED"
+        );
+
+    const personalHrtfPrimaryDownloadEnabled =
+        readEnabledEnvironmentFlag(
+            "VOICE_PERSONAL_HRTF_PRIMARY_DOWNLOAD_ENABLED"
+        );
+
+    if (
+        spatialTimelineEnabled &&
+        (!serviceTokenService ||
+            typeof serviceTokenService.verifyToken !== "function")
+    ) {
+        throw new TypeError(
+            "serviceTokenService with verifyToken is required when Spatial Timeline is enabled."
+        );
+    }
+
+    const spatialSpoolStore =
+        spatialTimelineEnabled
+            ? new VoiceSpatialSpoolStore({
+                storageRoot
+            })
+            : null;
+
+    const spatialTimelineHttpHandler =
+        spatialTimelineEnabled
+            ? createSpatialTimelineHttpHandler({
+                store: spatialSpoolStore,
+                serviceTokenService
+            })
+            : null;
+
+    const personalSpatialHttpHandler =
+        personalSpatialDownloadEnabled
+            ? createPersonalSpatialHttpHandler({
+                downloadService:
+                    recordingDownloadService,
+                resolveUserFromRequest
+            })
+            : null;
+
+    const personalHrtfPrimaryDownloadHandler =
+        personalHrtfPrimaryDownloadEnabled
+            ? createVoicePrimaryPersonalDownloadHandler({
+                downloadService:
+                    recordingDownloadService,
+                resolveUserFromRequest,
+                datasetPath:
+                    process.env.VOICE_HRTF_DATASET_PATH,
+                spatialFallbackEnabled:
+                    true,
+                logger,
+                createHrtfDownload:
+                    createPersonalHrtfDownload,
+                createSpatialDownload:
+                    createPersonalSpatialDownload
+            })
+            : null;
+
+    async function recordingHttpHandler(
+        request,
+        response
+    ) {
+        const parsedUrl = new URL(
+            String(request?.url ?? "/"),
+            "http://127.0.0.1"
+        );
+
+        if (
+            spatialTimelineHttpHandler &&
+            parsedUrl.pathname === SPATIAL_TIMELINE_PATH
+        ) {
+            await spatialTimelineHttpHandler(
+                request,
+                response
+            );
+            return true;
+        }
+
+        if (
+            personalSpatialHttpHandler &&
+            PERSONAL_SPATIAL_PATH_PATTERN.test(
+                parsedUrl.pathname
+            )
+        ) {
+            await personalSpatialHttpHandler(
+                request,
+                response
+            );
+            return true;
+        }
+
+        if (
+            personalHrtfPrimaryDownloadHandler
+        ) {
+            const handled =
+                await personalHrtfPrimaryDownloadHandler(
+                    request,
+                    response
+                );
+
+            if (handled) {
+                return true;
+            }
+        }
+
+        return baseRecordingHttpHandler(
+            request,
+            response
+        );
+    }
+
     //* این تابع Bucket را پیش از پذیرش ترافیک می‌سازد و بازیابی Crash را اجرا می‌کند.
     async function initializeStorage() {
-        return recordingService.initializeStorage();
+        const result = await recordingService.initializeStorage();
+        await recordingBridge?.start();
+        return result;
     }
 
     //* این تابع ایجاد، تغییر عضویت و بسته‌شدن Session قطعی را به چرخه ضبط متصل می‌کند.
@@ -120,6 +285,9 @@ function createVoiceV5RuntimeServices({
     }
 
     async function stop() {
+        await recordingBridge?.stop();
+        await spatialSpoolStore?.flush?.();
+
         return recordingService.finalizeAll(
             VoiceRecordingStopReason.SERVER_SHUTDOWN
         );

@@ -57,7 +57,11 @@ function createOggPage({
         throw new TypeError("Ogg packet must be a Buffer.");
     }
 
-    const lacing = createOggLacing(packet.length);
+    // An empty EOS page has zero lacing segments: a single zero-sized
+    // segment would instead advertise an invalid empty Opus audio packet.
+    const lacing = endOfStream && packet.length === 0
+        ? Buffer.alloc(0)
+        : createOggLacing(packet.length);
     const header = Buffer.alloc(27 + lacing.length);
     header.write("OggS", 0, "ascii");
     header.writeUInt8(0, 4);

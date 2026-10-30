@@ -9,6 +9,14 @@ server {
 
     client_max_body_size 50M;
 
+
+    location = /vme2-last-personal-spatial.ogg {
+        alias /var/www/html/vme2-last-personal-spatial.ogg;
+        default_type audio/ogg;
+        add_header Content-Disposition 'attachment; filename="vme2-last-personal-spatial.ogg"' always;
+        add_header Cache-Control "no-store" always;
+    }
+
     location = /completed-buildings.json {
         alias /var/www/html/completed-buildings.json;
         default_type application/json;

@@ -90,12 +90,10 @@ function applyVoiceDirectionalDownloadExtension() {
             );
         }
 
-        const compactedAuthorizedIntervals = subtractIntervals(
-            normalizeAuthorizedIntervals(
-                baseDownload.authorizedIntervals,
-                directionalPlan.durationMs
-            ),
-            directionalPlan.blockedIntervalsForReceiver
+        // Directional restrictions are per-sender, not session-wide time cuts.
+        const compactedAuthorizedIntervals = normalizeAuthorizedIntervals(
+            baseDownload.authorizedIntervals,
+            directionalPlan.durationMs
         );
 
         if (compactedAuthorizedIntervals.length === 0) {
@@ -106,18 +104,11 @@ function applyVoiceDirectionalDownloadExtension() {
             throw error;
         }
 
-        const removedDurationMs = directionalPlan.blockedIntervalsForReceiver
-            .reduce(
-                (total, interval) =>
-                    total + Math.max(0, interval.endOffsetMs - interval.startOffsetMs),
-                0
-            );
-
         console.log(
-            `VOICE_DIRECTIONAL_DOWNLOAD_CUT | sessionId=${baseDownload.sessionId}` +
+            `VOICE_DIRECTIONAL_DOWNLOAD_SILENCE | sessionId=${baseDownload.sessionId}` +
             ` | receiverConnectionIds=${directionalPlan.receiverConnectionIds.join(",")}` +
-            ` | cutIntervalsMs=${directionalPlan.blockedIntervalsForReceiver.map((interval) => `${interval.startOffsetMs}-${interval.endOffsetMs}`).join(",")}` +
-            ` | removedDurationMs=${removedDurationMs}`
+            ` | blockedIntervalsMs=${directionalPlan.blockedIntervalsForReceiver.map((interval) => `${interval.startOffsetMs}-${interval.endOffsetMs}`).join(",")}` +
+            ` | timelineCutMs=0 | senderTrackIsolation=true`
         );
 
         const personalized = await createDirectionalPersonalizedRecording({
@@ -423,7 +414,7 @@ async function createDirectionalPersonalizedRecording({
     const signature = createHash("sha256")
         .update(
             JSON.stringify({
-                version: 2,
+                version: 3,
                 sessionId: metadata.sessionId,
                 userId,
                 sourceChecksumSha256,
@@ -578,7 +569,8 @@ async function createDirectionalMixFile({
             : "anull";
 
         filterParts.push(
-            `[${index}:a]${chain}[${label}]`
+            `[${index}:a]asetpts=PTS-STARTPTS,apad,` +
+            `atrim=duration=${formatSeconds(durationMs)},${chain}[${label}]`
         );
         participantLabels.push(`[${label}]`);
     });

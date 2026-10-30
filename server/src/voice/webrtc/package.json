@@ -1,0 +1,9 @@
+{
+  "name": "vme2-webrtc-sfu-stage",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node server.mjs", "test": "node --test test/*.test.mjs", "check": "node --check server.mjs && node --check sfu-core.mjs" },
+  "dependencies": { "mediasoup": "3.30.0", "ws": "^8.18.3" }
+}

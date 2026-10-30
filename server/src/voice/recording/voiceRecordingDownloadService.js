@@ -27,6 +27,80 @@ import {
 const SESSION_ID_PATTERN =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+// A user can only request their own early-leaver snapshot. Hashing the
+// authenticated userId prevents directory traversal and makes directory
+// enumeration unnecessary for single-session status probes.
+function resolveRecordingPaths(sessionDirectory, normalizedUserId, early = false) {
+    if (!early) return {
+        metadataPath: join(sessionDirectory, "session.json"),
+        recordingPath: join(sessionDirectory, "session.ogg")
+    };
+    const userKey = createHash("sha256")
+        .update(normalizedUserId, "utf8").digest("hex");
+    return {
+        metadataPath: join(sessionDirectory, "early-leavers", `${userKey}.json`),
+        recordingPath: join(sessionDirectory, "early-leavers", `${userKey}.ogg`)
+    };
+}
+
+async function readAuthorizedRecordingSource({
+    sessionDirectory, sessionId, userId, early = false
+}) {
+    const {metadataPath, recordingPath} = resolveRecordingPaths(
+        sessionDirectory, userId, early
+    );
+    const [metadataJson, recordingStat] = await Promise.all([
+        readFile(metadataPath, "utf8"), stat(recordingPath)
+    ]);
+    if (!recordingStat.isFile()) return null;
+    const metadata = JSON.parse(metadataJson);
+    if (
+        String(metadata?.sessionId ?? "").toLowerCase() !== sessionId ||
+        metadata?.recordingContract !== "G4.RD1" ||
+        metadata?.authorizationModel !== "user_intervals_from_session_json" ||
+        !Array.isArray(metadata?.participants) ||
+        (early && metadata?.recordingVariant !== "early_leaver_snapshot_v1") ||
+        (!early && metadata?.recordingVariant === "early_leaver_snapshot_v1")
+    ) return null;
+    const memberships = metadata.participants.filter(
+        (p) => p?.userId === userId
+    );
+    if (memberships.length === 0) return null;
+    const rawIntervals = memberships.flatMap((p) =>
+        Array.isArray(p.intervals) ? p.intervals : []);
+    if (rawIntervals.length === 0) return null;
+    const membership = Object.freeze({
+        userId, intervals: Object.freeze(rawIntervals)
+    });
+    const durationMs = resolveRecordingDurationMs(metadata);
+    const authorizedIntervals = normalizeAuthorizedRecordingIntervals({
+        metadata, membership
+    });
+    if (authorizedIntervals.length === 0) return null;
+    return {
+        metadataPath, recordingPath, metadata, membership,
+        memberships, authorizedIntervals, durationMs, recordingStat, early
+    };
+}
+
+async function chooseAuthorizedRecordingSource({
+    sessionDirectory, sessionId, userId
+}) {
+    // Prefer complete recording when published. Until then, fall back to
+    // the private early-leaver clip; never expose another member's file.
+    for (const early of [false, true]) {
+        try {
+            const source = await readAuthorizedRecordingSource({
+                sessionDirectory, sessionId, userId, early
+            });
+            if (source) return source;
+        } catch (error) {
+            if (!["ENOENT", "ENOTDIR"].includes(error?.code)) throw error;
+        }
+    }
+    return null;
+}
+
 async function calculateRecordingFileChecksum(filePath) {
     const hash = createHash("sha256");
 
@@ -197,7 +271,8 @@ class VoiceRecordingDownloadService {
     }
 
     async listRecordings({
-        userId
+        userId,
+        sessionId = null
     } = {}) {
         const normalizedUserId =
             String(userId ?? "").trim();
@@ -208,10 +283,18 @@ class VoiceRecordingDownloadService {
             );
         }
 
-        const entries =
-            await readdir(this.storageRoot, {
-                withFileTypes: true
-            });
+        // A session-scoped status probe reads at most one metadata file;
+        // the regular list keeps the original all-sessions authorization path.
+        const hasSessionFilter = sessionId !== null && sessionId !== undefined;
+        const requestedSessionId = hasSessionFilter
+            ? String(sessionId).trim().toLowerCase()
+            : "";
+        if (hasSessionFilter && !SESSION_ID_PATTERN.test(requestedSessionId)) {
+            return Object.freeze([]);
+        }
+        const entries = hasSessionFilter
+            ? [{ name: requestedSessionId, isDirectory: () => true }]
+            : await readdir(this.storageRoot, { withFileTypes: true });
 
         const recordings = [];
 
@@ -232,115 +315,32 @@ class VoiceRecordingDownloadService {
                     entry.name
                 );
 
-            const metadataPath =
-                join(sessionDirectory, "session.json");
-
-            const recordingPath =
-                join(sessionDirectory, "session.ogg");
-
             try {
-                const [metadataJson, recordingStat] =
-                    await Promise.all([
-                        readFile(metadataPath, "utf8"),
-                        stat(recordingPath)
-                    ]);
-
-                if (!recordingStat.isFile()) {
-                    continue;
-                }
-
-                const metadata =
-                    JSON.parse(metadataJson);
-
-                if (
-                    String(metadata?.sessionId ?? "")
-                        .toLowerCase() !==
-                        normalizedSessionId ||
-                    metadata?.recordingContract !==
-                        "G4.RD1" ||
-                    metadata?.authorizationModel !==
-                        "user_intervals_from_session_json" ||
-                    !Array.isArray(
-                        metadata?.participants
-                    )
-                ) {
-                    continue;
-                }
-
-                const memberships =
-                    metadata.participants.filter(
-                        (participant) =>
-                            participant?.userId ===
-                            normalizedUserId
-                    );
-
-                if (memberships.length === 0) {
-                    continue;
-                }
-
-                const rawIntervals =
-                    memberships.flatMap(
-                        (entry) =>
-                            Array.isArray(entry?.intervals)
-                                ? entry.intervals
-                                : []
-                    );
-
-                if (rawIntervals.length === 0) {
-                    continue;
-                }
-
-                const membership =
-                    Object.freeze({
-                        userId: normalizedUserId,
-                        intervals:
-                            Object.freeze(
-                                rawIntervals
-                            )
-                    });
-
-                const durationMs =
-                    resolveRecordingDurationMs(
-                        metadata
-                    );
-
-                const authorizedIntervals =
-                    normalizeAuthorizedRecordingIntervals({
-                        metadata,
-                        membership
-                    });
-
-                if (authorizedIntervals.length === 0) {
-                    continue;
-                }
-
+                const source = await chooseAuthorizedRecordingSource({
+                    sessionDirectory,
+                    sessionId: normalizedSessionId,
+                    userId: normalizedUserId
+                });
+                if (!source) continue;
                 const fullRecordingAuthorized =
                     authorizedIntervalsCoverFullRecording(
-                        authorizedIntervals,
-                        durationMs
+                        source.authorizedIntervals, source.durationMs
                     );
-
-                recordings.push(
-                    Object.freeze({
-                        sessionId:
-                            normalizedSessionId,
-                        startedAtMs:
-                            normalizeRecordingMilliseconds(
-                                metadata.startedAtMs
-                            ),
-                        endedAtMs:
-                            normalizeRecordingMilliseconds(
-                                metadata.endedAtMs
-                            ),
-                        durationMs,
-                        authorizedIntervalCount:
-                            authorizedIntervals.length,
-                        downloadMode:
-                            fullRecordingAuthorized
-                                ? "full_session_passthrough"
-                                : "authorized_clip"
-                    })
-                );
+                recordings.push(Object.freeze({
+                    sessionId: normalizedSessionId,
+                    startedAtMs: normalizeRecordingMilliseconds(
+                        source.metadata.startedAtMs
+                    ),
+                    endedAtMs: normalizeRecordingMilliseconds(
+                        source.metadata.endedAtMs
+                    ),
+                    durationMs: source.durationMs,
+                    authorizedIntervalCount: source.authorizedIntervals.length,
+                    downloadMode: source.early
+                        ? "early_leaver_snapshot"
+                        : fullRecordingAuthorized
+                            ? "full_session_passthrough" : "authorized_clip"
+                }));
             } catch {
                 continue;
             }
@@ -384,80 +384,29 @@ class VoiceRecordingDownloadService {
         const sessionDirectory =
             join(this.storageRoot, normalizedSessionId);
 
-        const metadataPath =
-            join(sessionDirectory, "session.json");
-
-        const recordingPath =
-            join(sessionDirectory, "session.ogg");
-
-        const metadata = JSON.parse(
-            await readFile(metadataPath, "utf8")
-        );
-
-        if (
-            metadata.sessionId !== normalizedSessionId ||
-            !Array.isArray(metadata.participants)
-        ) {
-            throw new Error(
-                "Voice recording metadata is invalid."
-            );
-        }
-
-        const memberships =
-            metadata.participants.filter(
-                (participant) =>
-                    participant.userId ===
-                    normalizedUserId
-            );
-
-        if (memberships.length === 0) {
-            const error = new Error(
-                "Authenticated user is not a member of this Voice recording."
-            );
+        const source = await chooseAuthorizedRecordingSource({
+            sessionDirectory,
+            sessionId: normalizedSessionId,
+            userId: normalizedUserId
+        });
+        if (!source) {
+            const error = new Error("Voice recording is not ready or is unauthorized.");
             error.code = "VOICE_RECORDING_FORBIDDEN";
             throw error;
         }
-
-        const membership =
-            memberships.length === 1
-                ? memberships[0]
-                : Object.freeze({
-                    userId: normalizedUserId,
-                    connectionId: null,
-                    connectionIds:
-                        Object.freeze(
-                            memberships.map(
-                                (entry) =>
-                                    entry.connectionId
-                            )
-                        ),
-                    intervals:
-                        Object.freeze(
-                            memberships.flatMap(
-                                (entry) =>
-                                    Array.isArray(entry.intervals)
-                                        ? entry.intervals
-                                        : []
-                            )
-                        )
-                });
-
-        const durationMs =
-            resolveRecordingDurationMs(metadata);
-
-        const authorizedIntervals =
-            normalizeAuthorizedRecordingIntervals({
-                metadata,
-                membership
+        const {
+            metadataPath, recordingPath, metadata, durationMs,
+            authorizedIntervals
+        } = source;
+        const memberships = source.memberships;
+        const membership = memberships.length === 1
+            ? memberships[0]
+            : Object.freeze({
+                userId: normalizedUserId,
+                connectionId: null,
+                connectionIds: Object.freeze(memberships.map((e) => e.connectionId)),
+                intervals: Object.freeze(memberships.flatMap((e) => e.intervals ?? []))
             });
-
-        if (authorizedIntervals.length === 0) {
-            const error = new Error(
-                "Authenticated user has no authorized interval in this Voice recording."
-            );
-            error.code = "VOICE_RECORDING_FORBIDDEN";
-            throw error;
-        }
 
         const checksumSha256 =
             await calculateRecordingFileChecksum(
@@ -513,7 +462,8 @@ class VoiceRecordingDownloadService {
                 authorizationModel:
                     metadata.authorizationModel ??
                     "user_intervals_from_session_json",
-                downloadMode: clip.downloadMode,
+                downloadMode: source.early
+                    ? "early_leaver_authorized_clip" : clip.downloadMode,
                 authorizedIntervals,
                 membership:
                     Object.freeze({ ...membership }),
@@ -526,8 +476,9 @@ class VoiceRecordingDownloadService {
             sessionId: normalizedSessionId,
             recordingPath,
             metadataPath,
-            fileName:
-                `voice-session-${normalizedSessionId}.ogg`,
+            fileName: source.early
+                ? `voice-session-${normalizedSessionId}-early-leaver.ogg`
+                : `voice-session-${normalizedSessionId}.ogg`,
             contentType: "audio/ogg",
             contentLength: fileStat.size,
             checksumSha256,
@@ -537,8 +488,9 @@ class VoiceRecordingDownloadService {
             authorizationModel:
                 metadata.authorizationModel ??
                 "user_intervals_from_session_json",
-            downloadMode:
-                "full_session_passthrough",
+            downloadMode: source.early
+                ? "early_leaver_snapshot"
+                : "full_session_passthrough",
             authorizedIntervals,
             membership:
                 Object.freeze({ ...membership })

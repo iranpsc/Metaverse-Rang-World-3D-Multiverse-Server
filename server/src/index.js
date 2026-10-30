@@ -611,6 +611,8 @@ async function main() {
       createVoiceV5RuntimeServices({
         storageRoot: recordingStorageRoot,
         resolveUserFromRequest: gameServerControlAuthResolver,
+        serviceTokenService:
+          gameServerControlRuntime.serviceTokenService,
         logger
       });
 

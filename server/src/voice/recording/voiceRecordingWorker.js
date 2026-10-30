@@ -223,11 +223,90 @@ async function createMixedSessionRecording({
     );
 }
 
+// Join sequential Ogg segments through one FFmpeg input. ffconcat duration
+// advances each following segment to its original capture start time;
+// aresample fills the real silent gaps without creating hundreds of decoders.
+async function createAlignedParticipantRecordingWithTimeline({
+    segments,
+    outputPath,
+    sessionStartedAtMs,
+    durationSeconds,
+    minimumSegments = 24
+} = {}) {
+    // The private snapshot prefers the fast timeline even for short lists.
+    // Callers opt in only when the corrected Ogg muxer is present.
+    if (!Array.isArray(segments) || segments.length < minimumSegments) return false;
+
+    const firstStartedAtMs = Number(segments[0].startedAtMs);
+    if (!Number.isFinite(firstStartedAtMs) ||
+        firstStartedAtMs < Number(sessionStartedAtMs)) return false;
+
+    const timelineLines = ["ffconcat version 1.0"];
+    for (let i = 0; i < segments.length; i++) {
+        const current = segments[i];
+        const startedAtMs = Number(current.startedAtMs);
+        const endedAtMs = Number(current.endedAtMs);
+        if (!Number.isFinite(startedAtMs) || !Number.isFinite(endedAtMs) ||
+            endedAtMs < startedAtMs || !current.finalPath) return false;
+        const filePath = String(current.finalPath);
+        if (/[\r\n]/.test(filePath)) return false;
+        timelineLines.push(`file '${filePath.replace(/'/g, "'\\''")}'`);
+
+        if (i + 1 < segments.length) {
+            const nextStartedAtMs = Number(segments[i + 1].startedAtMs);
+            // Overlapping captures cannot be represented by concat timestamps.
+            if (!Number.isFinite(nextStartedAtMs) ||
+                nextStartedAtMs < endedAtMs) return false;
+            const delta = nextStartedAtMs - startedAtMs;
+            if (delta <= 0) return false;
+            timelineLines.push(`duration ${(delta / 1000).toFixed(3)}`);
+        }
+    }
+
+    const timelinePath = `${outputPath}.timeline.ffconcat`;
+    const initialDelayMs = Math.max(
+        0,
+        Math.round(firstStartedAtMs - Number(sessionStartedAtMs))
+    );
+    await writeFile(timelinePath, `${timelineLines.join("\n")}\n`, {
+        encoding: "utf8",
+        mode: 0o640,
+        flag: "wx"
+    });
+    const beganAtMs = Date.now();
+    try {
+        await runVoiceRecordingProcess(
+            resolveVoiceRecordingFfmpegPath(),
+            [
+                "-hide_banner", "-nostdin", "-y",
+                "-f", "concat", "-safe", "0", "-i", timelinePath,
+                "-filter_complex",
+                `[0:a]aresample=48000:async=1000:first_pts=0,` +
+                    `adelay=${initialDelayMs}:all=1,apad,` +
+                    `atrim=duration=${durationSeconds},` +
+                    `alimiter=limit=0.95,aresample=48000[aout]`,
+                "-map", "[aout]", "-vn", "-ac", "1", "-ar", "48000",
+                "-c:a", "libopus", "-b:a", "32000",
+                "-application", "voip", "-f", "ogg", outputPath
+            ]
+        );
+        writeVoiceRecordingWorkerTrace("ALIGNED_PARTICIPANT_FAST_TIMELINE_PASS", {
+            segmentCount: segments.length,
+            processingMs: Date.now() - beganAtMs,
+            outputPath
+        });
+        return true;
+    } finally {
+        await rm(timelinePath, { force: true });
+    }
+}
+
 async function createAlignedParticipantRecording({
     segments,
     outputPath,
     sessionStartedAtMs,
-    durationMs
+    durationMs,
+    preferTimeline = false
 } = {}) {
     const normalizedDurationMs =
         Math.max(20, Number(durationMs) || 0);
@@ -258,6 +337,21 @@ async function createAlignedParticipantRecording({
                 outputPath
             ]
         );
+        return;
+    }
+
+    if (await createAlignedParticipantRecordingWithTimeline({
+        segments: inputSegments,
+        outputPath,
+        sessionStartedAtMs,
+        durationSeconds,
+        // VME2 2026-10-29: FFmpeg 4.4.2 concat demuxer reproduces
+        // silent spans with real Opus session 9315b4d6... despite intact
+        // source segments. Keep this helper intact but route finalized
+        // participant audio through the already existing, tested
+        // per-segment adelay/amix path until a scalable fix is validated.
+        minimumSegments: Number.POSITIVE_INFINITY
+    })) {
         return;
     }
 
@@ -589,6 +683,8 @@ async function startSession(message) {
         combinedPartialPath,
         combinedFinalPath,
         participantsByConnectionId: new Map(),
+        // Snapshot encoding runs outside the live frame-operation queue.
+        snapshotTail: Promise.resolve(),
         nextSerialNumber: 0x4d560001,
         startedAtMs: message.startedAtMs,
         frameCount: 0,
@@ -615,6 +711,151 @@ async function startSession(message) {
     parentPort.postMessage({
         type: "started",
         sessionId: session.sessionId
+    });
+}
+
+// A snapshot is private to the user who actually left. Its filename is
+// SHA-256(userId), never a user-controlled path. The metadata is published
+// atomically *last* so the HTTP service cannot serve partial audio.
+async function createEarlyLeaverSnapshot({
+    activeSession, leavingUserId, endedAtMs, participantSnapshots,
+    authorizedIntervals
+}) {
+    const durationMs = Math.max(0, endedAtMs - activeSession.startedAtMs);
+    if (durationMs <= 0 || authorizedIntervals.length === 0) return;
+
+    const identityKey = createHash("sha256")
+        .update(leavingUserId, "utf8").digest("hex");
+    const snapshotDirectory = `${activeSession.outputDirectory}/early-leavers`;
+    await mkdir(snapshotDirectory, { recursive: true, mode: 0o750 });
+    const base = `${snapshotDirectory}/${identityKey}`;
+    // All snapshot jobs for a session are serialized; an update for the same
+    // user may safely replace an earlier published snapshot.
+    const staging = `${base}.building`;
+    const workDirectory = `${staging}.parts`;
+    const audioPath = `${base}.ogg`;
+    const metadataPath = `${base}.json`;
+    const stagedAudioPath = `${staging}.ogg`;
+    const stagedMetadataPath = `${staging}.json`;
+    await mkdir(workDirectory, { recursive: true, mode: 0o750 });
+    try {
+        const inputPaths = [];
+        for (let i = 0; i < participantSnapshots.length; i++) {
+            const participant = participantSnapshots[i];
+            const participantAudioPath = `${workDirectory}/${i}.ogg`;
+            await createAlignedParticipantRecording({
+                segments: participant.segments,
+                outputPath: participantAudioPath,
+                sessionStartedAtMs: activeSession.startedAtMs,
+                durationMs,
+                preferTimeline: true
+            });
+            inputPaths.push(participantAudioPath);
+        }
+        await createMixedSessionRecording({
+            inputPaths,
+            outputPath: stagedAudioPath
+        });
+        const checksumSha256 = await hashFile(stagedAudioPath);
+        // Only the recipient's *closed* membership intervals authorize this
+        // preview. If they joined late, resolveDownload produces an interval
+        // clip just as it does for the final group recording.
+        const metadata = {
+            version: 2,
+            recordingContract: "G4.RD1",
+            authorizationModel: "user_intervals_from_session_json",
+            recordingVariant: "early_leaver_snapshot_v1",
+            sessionId: activeSession.sessionId,
+            startedAtMs: activeSession.startedAtMs,
+            endedAtMs,
+            durationMs,
+            checksumAlgorithm: "sha256",
+            checksumSha256,
+            codec: "opus", container: "ogg", sampleRate: 48000,
+            channels: 1,
+            participants: [{
+                userId: leavingUserId,
+                intervals: authorizedIntervals
+            }]
+        };
+        await writeFile(stagedMetadataPath, `${JSON.stringify(metadata, null, 2)}\n`, {
+            encoding: "utf8", mode: 0o640, flag: "wx"
+        });
+        await rename(stagedAudioPath, audioPath);
+        await rename(stagedMetadataPath, metadataPath);
+        writeVoiceRecordingWorkerTrace("EARLY_LEAVER_SNAPSHOT_READY", {
+            sessionId: activeSession.sessionId,
+            userKey: identityKey.slice(0, 12),
+            durationMs,
+            intervalCount: authorizedIntervals.length
+        });
+    } finally {
+        await rm(stagedAudioPath, { force: true }).catch(() => {});
+        await rm(stagedMetadataPath, { force: true }).catch(() => {});
+        await rm(workDirectory, { recursive: true, force: true }).catch(() => {});
+    }
+}
+
+// Flush the current Ogg page for each consenting speaker so the background
+// snapshot sees immutable segment files. Future frames reopen new segments.
+async function queueEarlyLeaverSnapshot(activeSession, leaver, cutoffMs) {
+    const endedAtMs = Math.max(
+        Number(activeSession.startedAtMs), Number(cutoffMs)
+    );
+    const remaining = Array.from(activeSession.participantsByConnectionId.values())
+        .some((p) => p.active);
+    if (!remaining) return; // final session recording handles the last leaver
+
+    const intervals = leaver.intervals
+        .filter((interval) => interval.leftAtMs !== null)
+        .map((interval) => {
+            const start = Math.max(activeSession.startedAtMs, Number(interval.joinedAtMs));
+            const end = Math.min(endedAtMs, Number(interval.leftAtMs));
+            return {
+                joinedAtMs: start,
+                leftAtMs: end,
+                startOffsetMs: start - activeSession.startedAtMs,
+                endOffsetMs: end - activeSession.startedAtMs
+            };
+        })
+        .filter((interval) => interval.endOffsetMs > interval.startOffsetMs);
+    if (intervals.length === 0) return;
+
+    const speakers = [];
+    for (const participant of activeSession.participantsByConnectionId.values()) {
+        if (participant.active && participant.activeSegment) {
+            await closeParticipantSegment(activeSession, participant, endedAtMs);
+        }
+        // Ignore any captured frames after this cutoff, even in the presence
+        // of delayed/reordered membership notifications.
+        speakers.push({
+            segments: participant.segments
+                .filter((segment) => segment.startedAtMs < endedAtMs &&
+                    segment.endedAtMs !== null)
+                .map((segment) => ({
+                    startedAtMs: segment.startedAtMs,
+                    endedAtMs: Math.min(endedAtMs, segment.endedAtMs),
+                    finalPath: segment.finalPath
+                }))
+        });
+    }
+    // Do not await FFmpeg here: doing so would stall the live recording queue.
+    activeSession.snapshotTail = activeSession.snapshotTail
+        .catch(() => {})
+        .then(() => createEarlyLeaverSnapshot({
+            activeSession, leavingUserId: leaver.userId,
+            endedAtMs, participantSnapshots: speakers,
+            authorizedIntervals: intervals
+        }))
+        .catch((error) => {
+            writeVoiceRecordingWorkerTrace("EARLY_LEAVER_SNAPSHOT_FAILED", {
+                sessionId: activeSession.sessionId,
+                error: error?.message ?? String(error)
+            });
+        });
+    writeVoiceRecordingWorkerTrace("EARLY_LEAVER_SNAPSHOT_QUEUED", {
+        sessionId: activeSession.sessionId, endedAtMs,
+        speakerCount: speakers.length
     });
 }
 
@@ -655,6 +896,9 @@ async function updateMembership(message) {
             interval.leftAtMs = Math.max(
                 interval.joinedAtMs,
                 Number(message.effectiveAtMs)
+            );
+            await queueEarlyLeaverSnapshot(
+                session, participant, message.effectiveAtMs
             );
         }
     }
@@ -804,6 +1048,10 @@ async function stopSession(message) {
         throw new Error("Voice recording session is not active.");
     }
 
+    // Existing snapshots need their immutable source segments until completed.
+    // Serialize FFmpeg work after the session ends to avoid resource spikes.
+    await session.snapshotTail;
+
     const durationMs = Math.max(
         0,
         Number(message.endedAtMs) - Number(session.startedAtMs)
@@ -835,7 +1083,8 @@ async function stopSession(message) {
             segments: participant.segments,
             outputPath: participant.finalPath,
             sessionStartedAtMs: session.startedAtMs,
-            durationMs
+            durationMs,
+            preferTimeline: true
         });
 
         writeVoiceRecordingWorkerTrace("STOP_SESSION_PARTICIPANT_READY", {
@@ -859,6 +1108,10 @@ async function stopSession(message) {
         session.combinedPartialPath,
         session.combinedFinalPath
     );
+
+    // Background snapshots may still read the segment files. Never delete
+    // those files (or terminate this Worker) until snapshots finish.
+    await session.snapshotTail;
 
     try {
         await rm(session.segmentDirectory, {

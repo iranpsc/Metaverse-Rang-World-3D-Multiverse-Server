@@ -278,6 +278,13 @@ function checkFixedWindowRateLimit(rateMap, options = {}) {
 
     let entry = rateMap.get(key);
 
+    // A clock rollback must not turn a short window into an hours-long lockout.
+    if (entry && (!Number.isFinite(entry.resetAt) ||
+        entry.resetAt - now > windowMs)) {
+        rateMap.delete(key);
+        entry = null;
+    }
+
     if (!entry || now >= entry.resetAt) {
         entry = {
             count: 0,

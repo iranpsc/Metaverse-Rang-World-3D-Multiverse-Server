@@ -8,6 +8,9 @@ const LIST_PATH_PATTERN =
 const DOWNLOAD_PATH_PATTERN =
     /^\/voice\/recordings\/([0-9a-f-]{36})\/download\/?$/i;
 
+const STATUS_PATH_PATTERN =
+    /^\/voice\/recordings\/([0-9a-f-]{36})\/status\/?$/i;
+
 function writeVoiceRecordingJson(
     response,
     statusCode,
@@ -66,7 +69,9 @@ function createVoiceRecordingHttpHandler({
                 parsedUrl.pathname
             );
 
-        if (!isListPath && !match) return false;
+        const statusMatch = STATUS_PATH_PATTERN.exec(parsedUrl.pathname);
+
+        if (!isListPath && !match && !statusMatch) return false;
 
         if (request.method !== "GET") {
             writeVoiceRecordingJson(
@@ -95,6 +100,35 @@ function createVoiceRecordingHttpHandler({
                 }
             );
             return true;
+        }
+
+        if (statusMatch) {
+            try {
+                const recordings = await downloadService.listRecordings({
+                    userId: user.userId,
+                    sessionId: statusMatch[1]
+                });
+                const recording = recordings.length > 0
+                    ? recordings[0]
+                    : null;
+                // A missing, unfinished or unauthorized session all return
+                // the same response; do not reveal membership before finalization.
+                writeVoiceRecordingJson(response, 200, {
+                    success: true,
+                    ready: recording !== null,
+                    recording
+                });
+                return true;
+            } catch (error) {
+                logger?.error?.("[VoiceRecording] Status failed.", {
+                    error: error?.message ?? String(error)
+                });
+                writeVoiceRecordingJson(response, 500, {
+                    success: false,
+                    reason: "voice_recording_status_failed"
+                });
+                return true;
+            }
         }
 
         if (isListPath) {
@@ -242,5 +276,6 @@ function createVoiceRecordingHttpHandler({
 export {
     LIST_PATH_PATTERN,
     DOWNLOAD_PATH_PATTERN,
+    STATUS_PATH_PATTERN,
     createVoiceRecordingHttpHandler
 };

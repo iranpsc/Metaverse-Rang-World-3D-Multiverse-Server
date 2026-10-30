@@ -198,6 +198,7 @@ class VoiceRoutingApplication {
         this.routedBytes = 0;
         this.droppedRoutesByReason = new Map();
         this.voiceFrameTraceByConnectionId = new Map();
+        this.lastSessionReconciliationSentAtById = new Map();
     }
 
     //* این تابع درگاه انتقال مالک اتصال‌های فعال را پس از ساخت دریافت می‌کند.
@@ -417,6 +418,7 @@ class VoiceRoutingApplication {
 
         if (
             eventType !== "session_created" &&
+            eventType !== "session_reconciliation" &&
             eventType !== "member_joined" &&
             eventType !== "member_left" &&
             eventType !== "session_closed"
@@ -430,6 +432,54 @@ class VoiceRoutingApplication {
 
         const result =
             applyResult?.data?.result;
+
+        if (eventType === "session_reconciliation") {
+            if (result?.idempotent !== true ||
+                !Array.isArray(result?.session?.participants) ||
+                result.session.participants.length !== 2 ||
+                String(result.session.sessionId ?? "").toLowerCase() !==
+                    String(event.sessionId ?? "").toLowerCase()) {
+                return;
+            }
+
+            const sessionId = result.session.sessionId;
+            const nowMs = this.now();
+            const lastSentAtMs =
+                this.lastSessionReconciliationSentAtById.get(sessionId);
+
+            if (lastSentAtMs !== undefined &&
+                nowMs - lastSentAtMs < 6000) {
+                return;
+            }
+
+            this.lastSessionReconciliationSentAtById.set(sessionId, nowMs);
+
+            // Bound stale bookkeeping independently of Voice session lifecycle.
+            if (this.lastSessionReconciliationSentAtById.size > 512) {
+                for (const [id, sentAtMs] of
+                    this.lastSessionReconciliationSentAtById) {
+                    if (nowMs - sentAtMs > 60000) {
+                        this.lastSessionReconciliationSentAtById.delete(id);
+                    }
+                }
+                while (this.lastSessionReconciliationSentAtById.size > 512) {
+                    const oldestId =
+                        this.lastSessionReconciliationSentAtById.keys().next().value;
+                    this.lastSessionReconciliationSentAtById.delete(oldestId);
+                }
+            }
+
+            writeVoiceTrace("SESSION_RECONCILIATION_REPLAY", {
+                sessionId,
+                participantCount: result.session.participants.length
+            });
+        }
+
+        if (eventType === "session_closed") {
+            this.lastSessionReconciliationSentAtById.delete(
+                String(event?.sessionId ?? "").toLowerCase()
+            );
+        }
 
         const resolvedMemberConnectionId =
             String(
@@ -584,15 +634,74 @@ class VoiceRoutingApplication {
             }
         }
 
-        const deliveryResults =
-            await Promise.allSettled(deliveries);
+        // Reconcile each affected client with the server's authoritative
+        // active-session registry after any membership transition. The FIFO
+        // guarantees the snapshot is queued after JOINED/CLOSED/LEFT, and
+        // also repairs a stale client-side session if a previous CLOSE was
+        // missed before a later proximity-enter event. Never manufacture
+        // session IDs in the client and never hide an actual server duplicate.
+        const snapshotConnectionIds = new Set();
+        for (const participant of session.participants) {
+            const connectionId =
+                String(participant.connectionId ?? "").trim();
+            if (!connectionId || snapshotConnectionIds.has(connectionId)) {
+                continue;
+            }
+            snapshotConnectionIds.add(connectionId);
+            const target = this.gateway?.getConnectionByConnectionId(
+                connectionId
+            );
+            if (target) {
+                deliveries.push(
+                    this.sendSessionSnapshotToConnection(target, connectionId)
+                );
+            }
+        }
+        if (groupMemberLeft && resolvedMemberConnectionId &&
+            !snapshotConnectionIds.has(resolvedMemberConnectionId)) {
+            const leavingTarget = this.gateway?.getConnectionByConnectionId(
+                resolvedMemberConnectionId
+            );
+            if (leavingTarget) {
+                deliveries.push(
+                    this.sendSessionSnapshotToConnection(
+                        leavingTarget, resolvedMemberConnectionId
+                    )
+                );
+            }
+        }
+        writeVoiceTrace("DEDICATED_SESSION_SNAPSHOT_RECONCILE_QUEUED", {
+            eventType,
+            sessionId: session.sessionId ?? "",
+            snapshotConnectionCount: snapshotConnectionIds.size
+        });
 
-        writeVoiceTrace("DEDICATED_SESSION_EVENT_SEND_DONE", {
+        // Do not block the Dedicated delta HTTP acknowledgement on a client's
+        // WebSocket backpressure. sendEnvelope() has already synchronously
+        // appended each message to its connection-local sendingTail FIFO.
+        // Record completion asynchronously without suppressing any send result.
+        const deliveryQueuedAtMs = Date.now();
+        writeVoiceTrace("DEDICATED_SESSION_EVENT_SEND_QUEUED", {
             eventType: event?.type ?? "",
             sessionId: session.sessionId ?? "",
-            deliveryAttempts: deliveries.length,
-            fulfilled: deliveryResults.filter((result) => result.status === "fulfilled").length,
-            rejected: deliveryResults.filter((result) => result.status === "rejected").length
+            deliveryAttempts: deliveries.length
+        });
+
+        void Promise.allSettled(deliveries).then((deliveryResults) => {
+            writeVoiceTrace("DEDICATED_SESSION_EVENT_SEND_DONE", {
+                eventType: event?.type ?? "",
+                sessionId: session.sessionId ?? "",
+                deliveryAttempts: deliveries.length,
+                fulfilled: deliveryResults.filter((result) => result.status === "fulfilled").length,
+                rejected: deliveryResults.filter((result) => result.status === "rejected").length,
+                elapsedMs: Date.now() - deliveryQueuedAtMs
+            });
+        }).catch((error) => {
+            writeVoiceTrace("DEDICATED_SESSION_EVENT_SEND_REPORT_FAILED", {
+                eventType: event?.type ?? "",
+                sessionId: session.sessionId ?? "",
+                error: String(error?.message ?? error)
+            });
         });
     }
 

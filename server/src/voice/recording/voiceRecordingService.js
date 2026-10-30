@@ -1114,6 +1114,24 @@ class VoiceRecordingService {
         }
     }
 
+    //* این تابع فریم WebRTC را فقط به Sessionهای همان اتاق با رضایت فعال ارسال می‌کند.
+    captureWebRtcFrame({ roomId, connectionId, payload } = {}) {
+        if (typeof roomId !== "string" || typeof connectionId !== "string" ||
+            !Buffer.isBuffer(payload) || payload.length === 0 ||
+            payload.length > this.policy.maximumOpusFrameBytes) return 0;
+        const sender = connectionId.toLowerCase();
+        let accepted = 0;
+        for (const record of this.recordsBySessionId.values()) {
+            if (record.state !== VoiceRecordingState.RECORDING ||
+                record.session.roomId !== roomId ||
+                record.consentsByConnectionId.get(sender)?.consented !== true ||
+                !record.session.participants.some(p => p.connectionId === sender)) continue;
+            if (this.captureFrame({ session: record.session,
+                publisherConnectionId: sender, payload })) accepted += 1;
+        }
+        return accepted;
+    }
+
     //* این تابع ضبط Session را اتمیک نهایی و نتیجه آماده دانلود را نگه می‌دارد.
     async finalizeSession(
         sessionId,

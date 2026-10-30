@@ -10,6 +10,8 @@ import {
     registerVoiceGrpcTransport
 } from "../transport/index.js";
 
+import { createVoiceWebRtcW3SignalProxy } from "../webrtc/voiceWebRtcW3SignalProxy.js";
+
 const VOICE_WEBSOCKET_QUERY_KEY =
     "transport";
 
@@ -170,12 +172,26 @@ function createVoiceTransportRuntimeWrapper({
 
     let grpcRegistration = null;
     let stopped = false;
+    const webRtcW3Proxy = String(process.env.VME2_WEBRTC_W3_ENABLED ?? "") === "1"
+        ? createVoiceWebRtcW3SignalProxy({
+            allowedOrigin: process.env.VME2_WEBRTC_ALLOWED_ORIGIN,
+            target: process.env.VME2_WEBRTC_SFU_PROXY_TARGET ?? "ws://127.0.0.1:8767/ws",
+            logger
+          })
+        : null;
+
 
     //* این تابع اتصال وب‌سوکت را فقط به یکی از دو مسیر ریل‌تایم یا صوت تحویل می‌دهد.
     function routeWebSocketConnection(
         socket,
         request
     ) {
+        if (new URL(String(request?.url ?? "/"), "http://127.0.0.1")
+            .searchParams.get("transport") === "webrtc-w3") {
+            if (!webRtcW3Proxy) socket.close(1008, "w3_disabled");
+            else webRtcW3Proxy.accept(socket, request);
+            return;
+        }
         if (
             isVoiceWebSocketRequest(
                 request
@@ -265,6 +281,8 @@ function createVoiceTransportRuntimeWrapper({
 
         stopped = true;
 
+        webRtcW3Proxy?.stop();
+
         webSocketServer.off(
             "connection",
             routeWebSocketConnection
@@ -323,6 +341,8 @@ function createVoiceTransportRuntimeWrapper({
                 grpcRegistration
                     ?.serviceName ??
                 "",
+
+            webRtcW3: webRtcW3Proxy?.stats?.() ?? null,
 
             stopped
         });
